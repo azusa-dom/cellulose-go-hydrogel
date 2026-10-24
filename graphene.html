@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Graphene · 石墨烯网</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.184.0/build/three.module.js",
+    "three/addons/controls/OrbitControls.js": "https://unpkg.com/three@0.184.0/examples/jsm/controls/OrbitControls.js",
+    "three/addons/exporters/OBJExporter.js": "https://unpkg.com/three@0.184.0/examples/jsm/exporters/OBJExporter.js",
+    "three/addons/exporters/GLTFExporter.js": "https://unpkg.com/three@0.184.0/examples/jsm/exporters/GLTFExporter.js"
+  },
+  "integrity": {
+    "https://unpkg.com/three@0.184.0/build/three.module.js": "sha384-8FCZ1eVO6it4+pbec2aDtnTrwjWXZLJRC+MAGCIPDgsYnUrl/E0A2YlF8ioMKI/J",
+    "https://unpkg.com/three@0.184.0/build/three.core.js": "sha384-dw2ooPewaEIrAgl6oFDBmmBWCE9oW9LxRGcfwZ0hLvEprzo202wXl7vCYHRlSnOT",
+    "https://unpkg.com/three@0.184.0/examples/jsm/controls/OrbitControls.js": "sha384-4rziNxOBZKQ69i+w+f89KJ55TCYquwchVbByQwmaOeIOXdOU2PLDn3kOfXHwIJC9",
+    "https://unpkg.com/three@0.184.0/examples/jsm/exporters/OBJExporter.js": "sha384-nbwtoZENJD3Vq+ACK0CuGQdPMuDWHkamC2KJD70EV5nfg6jQjfppKOea07YJN+N3",
+    "https://unpkg.com/three@0.184.0/examples/jsm/exporters/GLTFExporter.js": "sha384-VofkvpG6HERhFCYbsUOHeNXBCqID2nfqkQqnVzE1jc/oPcz+qJ13ADdXH08hE+cQ"
+  }
+}
+</script>
+<style>
+  html, body { margin: 0; height: 100%; background: #e6e9ed; font-family: "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif; color: #1c2733; }
+  a { color: #2f74c0; } a:hover { color: #1d4f8a; }
+  three-d-stage:not(:defined) { visibility: hidden; }
+  three-d-stage { --stage-bg: radial-gradient(120% 90% at 50% 35%, #f7f8fa 0%, #e4e7eb 60%, #cfd4da 100%); }
+  .label { position: fixed; top: 28px; left: 32px; white-space: nowrap; display: flex; flex-direction: column; gap: 4px; pointer-events: none; }
+  .label b { font-size: 22px; font-weight: 600; color: #15212c; }
+  .label span { font-size: 12px; color: #4a5866; }
+  .panel { position: fixed; top: 20px; right: 20px; width: 220px; background: #fff; border: 1px solid #dfe5ea; border-radius: 6px; padding: 14px; display: flex; flex-direction: column; gap: 12px; font-size: 12.5px; }
+  .panel h2 { margin: 0; font-size: 12px; font-weight: 600; color: #1b2733; }
+  .presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .presets button { display: flex; justify-content: center; padding: 7px 2px; border: 1px solid #dfe5ea; border-radius: 5px; background: #fff; cursor: pointer; }
+  .presets button.on { border-color: #1f3b55; }
+  .presets i { display: flex; } .presets i b { width: 14px; height: 14px; border-radius: 50%; border: 2px solid #fff; margin: 0 -2px; }
+  .colors { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .colors label { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 9px; background: #f3f6f8; color: #33424f; cursor: pointer; }
+  .colors label:hover { background: #eaeff3; }
+  input[type=color] { -webkit-appearance: none; appearance: none; flex: none; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer; overflow: hidden; box-shadow: 0 0 0 1px rgba(27,39,51,.12); }
+  input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+  input[type=color]::-webkit-color-swatch { border: 0; border-radius: 50%; }
+  input[type=color]::-moz-color-swatch { border: 0; border-radius: 50%; }
+  .row { display: flex; flex-direction: column; gap: 4px; }
+  .row label { display: flex; justify-content: space-between; white-space: nowrap; color: #33424f; }
+  .row label span:last-child { color: #8796a2; font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; margin: 2px 0; accent-color: #5b88b0; height: 16px; }
+  .svgbtn { font: inherit; font-size: 13px; padding: 8px 14px; border: 1px solid #dfe5ea; border-radius: 6px; background: #fff; color: #1a1915; cursor: pointer; white-space: nowrap; }
+  .svgbtn:hover { background: #fff; }
+  .pages { position: fixed; top: 18px; left: 50%; transform: translateX(-50%); z-index: 5; display: flex; gap: 2px; padding: 3px; background: #fff; border: 1px solid #dfe5ea; border-radius: 6px; font-family: "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif; }
+  .pages a { display: flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 4px; font-size: 12.5px; color: #5b6b78; text-decoration: none; white-space: nowrap; }
+  .pages a:hover { color: #1b2733; background: rgba(27,39,51,.04); }
+  .pages a.on { background: #1f3b55; color: #fff; }
+  .pages a i { font-style: normal; font-size: 11px; opacity: .7; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<nav class="pages"><a href="index.html">复合水凝胶</a><a href="graphene.html" class="on">石墨烯单层</a></nav>
+<three-d-stage name="graphene"></three-d-stage>
+<div class="label"><b>石墨烯单层</b><span>C–C 1.42 Å</span></div>
+<div class="panel">
+  <h2>配色</h2>
+  <div class="presets" id="presets"></div>
+  <div class="colors">
+    <label><input type="color" id="cAtom"> 原子</label>
+    <label><input type="color" id="cBond"> 键</label>
+  </div>
+  <div class="row"><label><span>原子大小</span><span id="atomV"></span></label><input type="range" id="atomS" min="0.5" max="1.6" step="0.05"></div>
+  <div class="row"><label><span>键粗细</span><span id="bondV"></span></label><input type="range" id="bondS" min="0.5" max="2" step="0.05"></div>
+  <button class="svgbtn" id="svgBtn" type="button">导出 SVG</button>
+</div>
+<script src="three-d-stage.js"></script>
+<script type="module">
+const stage = document.querySelector('three-d-stage');
+const { THREE } = await stage.ready;
+
+// ---- lattice ----------------------------------------------------------
+const A = 0.142;                 // C–C bond (scaled: 1 m = 1 nm)
+const R_ATOM = 0.04, R_BOND = 0.0125;
+const W = 1.32, H = 1.02;        // half extents of the sheet
+const s3 = Math.sqrt(3);
+const ripple = (x, z) =>
+  0.055 * Math.sin(1.9 * x + 0.6) * Math.cos(1.6 * z - 0.3) +
+  0.028 * Math.sin(2.6 * z + 1.2 * x + 0.8);
+
+let pts = [];
+for (let i = -14; i <= 14; i++) for (let j = -12; j <= 12; j++) {
+  const ox = i * s3 * A + j * s3 * A / 2, oz = j * 1.5 * A;
+  for (const [x, z] of [[ox, oz], [ox, oz + A]])
+    if (Math.abs(x) <= W && Math.abs(z) <= H) pts.push({ x, z });
+}
+const near = (p, q) => Math.abs(Math.hypot(p.x - q.x, p.z - q.z) - A) < 1e-4;
+// prune dangling atoms until every atom closes at least two bonds
+for (let changed = true; changed;) {
+  changed = false;
+  const keep = pts.filter(p => pts.filter(q => q !== p && near(p, q)).length >= 2);
+  if (keep.length !== pts.length) { pts = keep; changed = true; }
+}
+const atoms = pts.map(p => new THREE.Vector3(p.x, ripple(p.x, p.z), p.z));
+const bonds = [];
+for (let a = 0; a < pts.length; a++) for (let b = a + 1; b < pts.length; b++)
+  if (near(pts[a], pts[b])) bonds.push([a, b]);
+
+// ---- geometry merge (keeps export to two clean meshes) -------------------
+function merge(geos) {
+  let nv = 0, ni = 0;
+  for (const g of geos) { nv += g.attributes.position.count; ni += g.index.count; }
+  const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), uv = new Float32Array(nv * 2);
+  const idx = new Uint32Array(ni);
+  let vo = 0, io = 0;
+  for (const g of geos) {
+    pos.set(g.attributes.position.array, vo * 3);
+    nor.set(g.attributes.normal.array, vo * 3);
+    uv.set(g.attributes.uv.array, vo * 2);
+    const gi = g.index.array;
+    for (let k = 0; k < gi.length; k++) idx[io + k] = gi[k] + vo;
+    vo += g.attributes.position.count; io += gi.length;
+    g.dispose();
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  out.setIndex(new THREE.BufferAttribute(idx, 1));
+  return out;
+}
+
+const atomGeos = atoms.map(p => {
+  const g = new THREE.SphereGeometry(R_ATOM, 36, 24);
+  g.translate(p.x, p.y, p.z);
+  return g;
+});
+const up = new THREE.Vector3(0, 1, 0), m = new THREE.Matrix4(), q = new THREE.Quaternion();
+const bondGeos = bonds.map(([a, b]) => {
+  const pa = atoms[a], pb = atoms[b];
+  const d = new THREE.Vector3().subVectors(pb, pa);
+  const g = new THREE.CylinderGeometry(R_BOND, R_BOND, d.length(), 20, 1, true);
+  q.setFromUnitVectors(up, d.clone().normalize());
+  m.compose(pa.clone().add(pb).multiplyScalar(0.5), q, new THREE.Vector3(1, 1, 1));
+  g.applyMatrix4(m);
+  return g;
+});
+
+const carbon = new THREE.MeshStandardMaterial({ name: 'carbon_atom', color: 0x3d86d4, roughness: 0.16, metalness: 0.12 });
+const bondMat = new THREE.MeshStandardMaterial({ name: 'cc_bond', color: 0x5b9ade, roughness: 0.26, metalness: 0.1 });
+const atomMesh = new THREE.Mesh(merge(atomGeos), carbon); atomMesh.name = 'carbon_atoms';
+const bondMesh = new THREE.Mesh(merge(bondGeos), bondMat); bondMesh.name = 'cc_bonds';
+
+const model = new THREE.Group(); model.name = 'graphene_sheet';
+model.add(bondMesh, atomMesh);
+model.rotation.y = -0.38;
+
+// ---- studio look: soft-box reflections, blue-tinted floating shadow ----
+const scene = stage._scene, renderer = stage._renderer;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+const env = new THREE.Scene();
+env.add(new THREE.Mesh(new THREE.SphereGeometry(20, 32, 16),
+  new THREE.MeshBasicMaterial({ color: 0x8a96a3, side: THREE.BackSide })));
+const panel = (w, h, x, y, z, c) => {
+  const p = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide }));
+  p.position.set(x, y, z); p.lookAt(0, 0, 0); env.add(p);
+};
+panel(14, 6, 0, 12, 4, 0xffffff);
+panel(6, 8, 12, 4, 6, 0xf2f6ff);
+panel(5, 6, -12, 3, -4, 0xb9d4f5);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(env, 0.035).texture;
+scene.environmentIntensity = 0.9;
+scene.traverse(o => { if (o.isHemisphereLight) o.intensity = 0.45; });
+
+stage._key.position.set(2.5, 8, 3.5);
+renderer.shadowMap.type = THREE.VSMShadowMap;
+stage._key.shadow.radius = 10;
+stage._key.shadow.blurSamples = 20;
+stage._ground.material.needsUpdate = true;
+stage.setObject(model);
+{ const sr = stage.shadowRoot; sr.querySelector('.note').style.display = 'none';
+  const bs = sr.querySelectorAll('.toolbar button'); bs[0].textContent = '下载 OBJ + MTL'; bs[1].textContent = '下载 GLB';
+  bs.forEach(b => { b.style.borderRadius = '6px'; b.style.border = '1px solid #dfe5ea'; b.style.background = '#fff'; b.style.fontFamily = 'inherit'; b.style.whiteSpace = 'nowrap'; }); }
+atomMesh.receiveShadow = bondMesh.receiveShadow = false;
+
+const box = new THREE.Box3().setFromObject(model);
+stage._ground.position.y = box.min.y - 0.2;
+stage._ground.material.color.set(0x1f4f86);
+
+// ---- colour / size customisation ----
+const PRESETS = [['#3a4452', '#9aa6b4'], ['#4f6d94', '#a3b6cc'], ['#5f8f7c', '#aac7b9'], ['#7d6a5c', '#c2b3a6']];
+const KEY = 'graphene.style.v2';
+const S = Object.assign({ atom: '#3a4452', bond: '#9aa6b4', atomS: 1, bondS: 1 }, JSON.parse(localStorage.getItem(KEY) || '{}'));
+const $ = id => document.getElementById(id);
+const C3 = c => new THREE.Color(c);
+window.__gcol = () => S;
+function applyStyle() {
+  carbon.color.set(S.atom); bondMat.color.set(S.bond);
+  stage._ground.material.color.copy(C3(S.atom).multiplyScalar(0.5));
+  atomMesh.scale.setScalar(1); // geometry is baked; size is applied by rebuilding below
+  $('cAtom').value = S.atom; $('cBond').value = S.bond;
+  [...$('presets').children].forEach((b, i) => b.classList.toggle('on', PRESETS[i][0] === S.atom && PRESETS[i][1] === S.bond));
+  localStorage.setItem(KEY, JSON.stringify(S));
+}
+function rebuildSizes() {
+  atomMesh.geometry.dispose(); bondMesh.geometry.dispose();
+  atomMesh.geometry = merge(atoms.map(p => { const g = new THREE.SphereGeometry(R_ATOM * S.atomS, 36, 24); g.translate(p.x, p.y, p.z); return g; }));
+  bondMesh.geometry = merge(bonds.map(([a, b]) => {
+    const pa = atoms[a], pb = atoms[b], d = new THREE.Vector3().subVectors(pb, pa);
+    const g = new THREE.CylinderGeometry(R_BOND * S.bondS, R_BOND * S.bondS, d.length(), 20, 1, true);
+    q.setFromUnitVectors(up, d.clone().normalize()); m.compose(pa.clone().add(pb).multiplyScalar(0.5), q, new THREE.Vector3(1, 1, 1)); g.applyMatrix4(m); return g;
+  }));
+  localStorage.setItem(KEY, JSON.stringify(S));
+}
+PRESETS.forEach(([a, b]) => { const el = document.createElement('button'); el.type = 'button';
+  el.innerHTML = `<i><b style="background:${a}"></b><b style="background:${b}"></b></i>`;
+  el.addEventListener('click', () => { S.atom = a; S.bond = b; applyStyle(); }); $('presets').appendChild(el); });
+$('cAtom').addEventListener('input', e => { S.atom = e.target.value; applyStyle(); });
+$('cBond').addEventListener('input', e => { S.bond = e.target.value; applyStyle(); });
+for (const [id, k, v] of [['atomS', 'atomS', 'atomV'], ['bondS', 'bondS', 'bondV']]) {
+  $(id).value = S[k]; $(v).textContent = (+S[k]).toFixed(2);
+  $(id).addEventListener('input', e => { $(v).textContent = (+e.target.value).toFixed(2); });
+  $(id).addEventListener('change', e => { S[k] = +e.target.value; rebuildSizes(); });
+}
+applyStyle();
+if (S.atomS !== 1 || S.bondS !== 1) rebuildSizes();
+stage._ground.material.opacity = 0.22;
+const sph = box.getBoundingSphere(new THREE.Sphere());
+const dist = stage._camera.position.distanceTo(sph.center) * 0.6;
+stage._camera.position.copy(sph.center).add(new THREE.Vector3(0.3, 1.0, 0.95).normalize().multiplyScalar(dist));
+stage._controls.update();
+
+// ---- vector export of the current camera view ---------------------------
+document.getElementById('svgBtn').addEventListener('click', () => {
+  const cam = stage._camera, cvs = renderer.domElement;
+  const Wp = cvs.clientWidth, Hp = cvs.clientHeight;
+  const focal = Hp / (2 * Math.tan(cam.fov * Math.PI / 360));
+  const proj = p0 => {
+    const p = p0.clone().applyMatrix4(model.matrixWorld);
+    const v = p.clone().project(cam), d = p.distanceTo(cam.position);
+    return { x: (v.x + 1) / 2 * Wp, y: (1 - v.y) / 2 * Hp, d, s: focal / d };
+  };
+  const P = atoms.map(proj);
+  const items = [];
+  bonds.forEach(([a, b]) => items.push({ d: (P[a].d + P[b].d) / 2 + 1e-4, bond: [P[a], P[b]] }));
+  P.forEach(p => items.push({ d: p.d, atom: p }));
+  items.sort((u, v) => v.d - u.d);
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  P.forEach(p => { const r = R_ATOM * S.atomS * p.s; x0 = Math.min(x0, p.x - r); y0 = Math.min(y0, p.y - r); x1 = Math.max(x1, p.x + r); y1 = Math.max(y1, p.y + r); });
+  const pad = 24; x0 -= pad; y0 -= pad; x1 += pad; y1 += pad;
+  const f = n => n.toFixed(2);
+  const mix = (c, t, k) => '#' + C3(c).lerp(C3(t), k).getHexString();
+  const rA = R_ATOM * S.atomS, rB = R_BOND * S.bondS;
+  const bDark = mix(S.bond, '#000', 0.45), bHi = mix(S.bond, '#fff', 0.7), aEdge = mix(S.atom, '#000', 0.5);
+  let body = '';
+  for (const it of items) {
+    if (it.bond) {
+      const [a, b] = it.bond, w = 2 * rB * (a.s + b.s) / 2;
+      body += `<line x1="${f(a.x)}" y1="${f(a.y)}" x2="${f(b.x)}" y2="${f(b.y)}" stroke="${bDark}" stroke-width="${f(w + 1.1)}"/>` +
+              `<line x1="${f(a.x)}" y1="${f(a.y)}" x2="${f(b.x)}" y2="${f(b.y)}" stroke="${S.bond}" stroke-width="${f(w * 0.72)}"/>` +
+              `<line x1="${f(a.x)}" y1="${f(a.y)}" x2="${f(b.x)}" y2="${f(b.y)}" stroke="${bHi}" stroke-width="${f(w * 0.22)}" stroke-opacity=".8"/>`;
+    } else {
+      const p = it.atom;
+      body += `<circle cx="${f(p.x)}" cy="${f(p.y)}" r="${f(rA * p.s)}" fill="url(#c)" stroke="${aEdge}" stroke-width=".6"/>`;
+    }
+  }
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${f(x0)} ${f(y0)} ${f(x1 - x0)} ${f(y1 - y0)}" width="${Math.round(x1 - x0)}" height="${Math.round(y1 - y0)}">
+<defs><radialGradient id="c" cx="0.36" cy="0.32" r="0.72"><stop offset="0" stop-color="${mix(S.atom, '#fff', 0.92)}"/><stop offset="0.18" stop-color="${mix(S.atom, '#fff', 0.5)}"/><stop offset="0.55" stop-color="${S.atom}"/><stop offset="0.88" stop-color="${mix(S.atom, '#000', 0.3)}"/><stop offset="1" stop-color="${mix(S.atom, '#000', 0.45)}"/></radialGradient></defs>
+<g stroke-linecap="round">${body}</g></svg>`;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+  a.download = 'graphene.svg'; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+});
+</script>
+</body>
+</html>
