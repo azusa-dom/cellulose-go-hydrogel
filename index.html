@@ -193,8 +193,8 @@ const PRESETS = [
   { a: '#a8e0d6', b: '#b1c3f0' },
   { a: '#c4e3a8', b: '#9fd3e6' },
 ];
-const SAVE_KEY = 'cellGO3d.largeRings.lanes1';
-const DEF = { seed: 11, colorA: PRESETS[0].a, colorB: PRESETS[0].b, colorC: '#3b4654', colorO: '#e2725f', finish: 'frost', dist: 'alternate', perAxis: 4, radius: 0.043, curve: 1, sheets: 5, wrinkle: 0.6, density: 0, atoms: false, spin: false };
+const SAVE_KEY = 'cellGO3d.largeRings.lanes2';
+const DEF = { seed: 11, colorA: PRESETS[0].a, colorB: PRESETS[0].b, colorC: '#3b4654', colorO: '#e2725f', finish: 'frost', dist: 'alternate', perAxis: 4, radius: 0.043, curve: 1, sheets: 3, wrinkle: 0.6, density: 0, atoms: false, spin: false };
 const P = Object.assign({}, DEF, JSON.parse(localStorage.getItem(SAVE_KEY) || '{}'));
 for (const [k, lo, hi] of [['perAxis', 3, 6], ['radius', 0.028, 0.055], ['curve', 0, 1.6], ['wrinkle', 0, 1.5]]) P[k] = Math.min(hi, Math.max(lo, P[k]));
 const save = () => localStorage.setItem(SAVE_KEY, JSON.stringify(P));
@@ -278,19 +278,27 @@ const ballM = (p, r) => new THREE.Matrix4().compose(p, new THREE.Quaternion(), n
 const FACES = [[1, 1], [2, -1], [0, -1], [0, 1], [1, -1], [2, 1]];   // top, back, left, right, bottom, front
 const EDGE = 0.28, STAG = 0.12;
 const facePlane = () => EDGE + STAG + P.radius * 1.1 + gapF() + 0.004 * LS;
+// Flakes look crumpled and dropped in at random: which cage faces they rest on, their tilt,
+// turn, size and shape all vary with the seed. Each flake is bent as a whole (hammock or
+// saddle, its edges curling away from the cage) and creased by a few random folds; the
+// wrinkle slider sets how hard it is crumpled.
 function faceSheets() {
   const rng = mulberry32(P.seed * 97 + 13);
-  return FACES.slice(0, P.sheets).map(([ax, sd], i) => {
+  const faces = [FACES[0], ...shuffle(FACES.slice(1), rng)];
+  return faces.slice(0, P.sheets).map(([ax, sd], i) => {
     const def = SHEETS[i], r2 = mulberry32(P.seed * 31 + i);
     const U = new V3(), Vv = new V3(); U.setComponent((ax + 1) % 3, 1); Vv.setComponent((ax + 2) % 3, 1);
     const N = new V3().crossVectors(U, Vv);
-    const q = new THREE.Quaternion().setFromAxisAngle(N, (rng() - 0.5) * 0.7)
-      .premultiply(new THREE.Quaternion().setFromEuler(new THREE.Euler((rng() - 0.5) * 0.12, (rng() - 0.5) * 0.12, (rng() - 0.5) * 0.12)));
+    const q = new THREE.Quaternion().setFromAxisAngle(N, (rng() - 0.5) * 1.6)
+      .premultiply(new THREE.Quaternion().setFromEuler(new THREE.Euler((rng() - 0.5) * 0.62, (rng() - 0.5) * 0.62, (rng() - 0.5) * 0.62)));
     U.applyQuaternion(q); Vv.applyQuaternion(q); N.applyQuaternion(q);
-    const C = new V3(); C.setComponent(ax, sd * facePlane());
-    const s0 = EDGE + STAG + P.radius * 0.4;
-    return { U, V: Vv, N, C, ax, sd, rw: s0 * (0.95 + 0.1 * r2()), rh: s0 * (0.95 + 0.1 * r2()), pe: 3.4,
-      k1: def.k1 * 0.25, k2: def.k2 * 0.25, A: def.A,
+    const C = new V3(); C.setComponent(ax, sd * (facePlane() + 0.03 + rng() * 0.05));
+    C.addScaledVector(U, (rng() - 0.5) * 0.12).addScaledVector(Vv, (rng() - 0.5) * 0.12);
+    const s0 = EDGE + STAG + P.radius * 0.4, out = Math.sign(N.dot(C)) || 1;   // +1: the flake's N points away from the cage
+    const folds = [...Array(4)].map(() => { const th = r2() * 6.28, kk = 7 + r2() * 6;
+      return [kk * Math.cos(th), kk * Math.sin(th), 0.03 + r2() * 0.03, r2() * 6.28]; });
+    return { U, V: Vv, N, C, ax, sd, rw: s0 * (0.8 + 0.35 * r2()), rh: s0 * (0.8 + 0.35 * r2()), pe: 3.4,
+      k1: out * (0.6 + r2() * 0.9), k2: out * (r2() * 1.4 - 0.4), A: def.A, folds,   // mostly curling away, now and then a saddle
       f1: r2() * 6.28, f2: r2() * 6.28, p1: r2() * 6.28, p2: r2() * 6.28, p3: r2() * 6.28, rng: r2 };
   });
 }
@@ -446,7 +454,8 @@ function makeSheet(def, rng) {
   return { U, V: Vv, N, C, rw: def.rw * 1.3, rh: def.rh * 1.3, k1: def.k1, k2: def.k2, A: def.A,
     f1: rng() * 6.28, f2: rng() * 6.28, p1: rng() * 6.28, p2: rng() * 6.28, p3: rng() * 6.28, rng };
 }
-const hgt = (pl, s, t) => pl.k1 * s * s + pl.k2 * t * t + P.wrinkle * (pl.A * Math.sin(s * 11 + pl.f1) * Math.cos(t * 8 + pl.f2) + FINE * Math.sin(s * 31 + t * 23 + pl.f2));
+const crumple = (pl, s, t) => { let h = 0; if (pl.folds) for (const [a, b, amp, ph] of pl.folds) h += amp * Math.sin(a * s + b * t + ph); return h; };
+const hgt = (pl, s, t) => pl.k1 * s * s + pl.k2 * t * t + P.wrinkle * (pl.A * Math.sin(s * 11 + pl.f1) * Math.cos(t * 8 + pl.f2) + FINE * Math.sin(s * 31 + t * 23 + pl.f2) + crumple(pl, s, t));
 const rimOf = (pl, s, t) => { const th = Math.atan2(t / pl.rh, s / pl.rw);
   return 1 + 0.04 * Math.sin(3 * th + pl.p1) + 0.03 * Math.sin(5 * th + pl.p2) + 0.015 * Math.sin(8 * th + pl.p3); };
 const inFoot = (pl, s, t, m = 0) => { const e = pl.pe || 2.6; return Math.pow(Math.pow(Math.abs(s) / (pl.rw + m), e) + Math.pow(Math.abs(t) / (pl.rh + m), e), 1 / e) < rimOf(pl, s, t); };
