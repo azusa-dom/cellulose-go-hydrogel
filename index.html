@@ -308,8 +308,8 @@ const R = { cAtom: 0.0045, cc: 0.002, gStick: 0.0019, O: 0.0062, H: 0.004 };
 // one sheet to the next. GO is impermeable, so no fiber passes through a sheet; fibers
 // that cross on the same face climb over each other instead of passing through.
 const SKIN = 0.035, GAP = 0.004;          // functional groups reach ~0.035 off the basal plane
-// room for one fiber on each of two facing faces (follows the thickness slider)
-const sheetGap = () => 2 * (2.2 * P.radius + SKIN + GAP) + 0.02;
+// sheets never touch; fibers bend around where two sheets come close (follows the thickness slider)
+const sheetGap = () => 1.1 * P.radius + 2 * (SKIN + GAP) + 0.02;
 const AXES = [new V3(1, 0, 0), new V3(0, 1, 0), new V3(0, 0, 1)];
 function frame(u, v) {
   const U = new V3(...u).normalize(), Vf = new V3(...v);
@@ -375,39 +375,37 @@ function clearOfSheets(pl, placed) {
   }
   return true;
 }
-// Sheets first: a loose layered stack (two side by side from four sheets up), each sheet
-// roughly level, turned and tilted a little. Spacing leaves room for a fiber between
-// neighbours; the stack opens up until no two sheets come within that gap, so every
-// requested sheet is always placed. The fiber-count, curve and wrinkle sliders do not move them.
+// Sheets first: one loose, irregular cluster. Sheets lie at mixed angles (level, upright
+// one way, upright the other, tilted, now and then any angle) and vary in size. Each is
+// placed where it keeps sheetGap() from the others; the cluster only opens up when a
+// sheet finds no room, so every requested sheet is always placed. The fiber-count,
+// curve and wrinkle sliders do not move them.
+const FRAMES = [[[1, 0, 0], [0, 0, 1]], [[0, 0, 1], [0, 1, 0]], [[0, 1, 0], [1, 0, 0]]];   // normals y, x, z
 function placeSheets(count) {
   if (!count) return [];
   const rng = mulberry32(P.seed * 97 + 13);
-  const cols = count >= 4 ? 2 : 1, rows = Math.ceil(count / cols);
-  const sc = [1, 1.3, 1.22, 1.12, 0.86, 0.8, 0.74][count];
-  const base = SHEETS.slice(0, count).map((def, i) => {
-    const yaw = rng() * 6.28, tx = (rng() - 0.5) * 0.24, tz = (rng() - 0.5) * 0.24;
-    const F = frame([1, 0, 0], [0, 0, 1]);
-    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(tx, yaw, tz, 'YXZ'));
-    F.U.applyQuaternion(q); F.V.applyQuaternion(q); F.N.applyQuaternion(q);
-    return { F, def, jitter: [(rng() - 0.5) * 0.12, (rng() - 0.5) * 0.12], phase: mulberry32(P.seed * 31 + i * 7) };
-  });
-  const reachOf = b => Math.max(b.def.rw, b.def.rh) * sc * 1.16;   // farthest edge from the centre
-  const clear = sheetGap() + 2 * Math.max(...base.map(b => wmax(b.def)));   // what clearOfSheets() asks for
-  const halfX = cols === 2 ? Math.max(...base.map(reachOf)) + clear / 2 + 0.02 : 0;
-  for (let grow = 1; ; grow *= 1.05) {
-    const dy = (clear + 0.03) * grow;
-    const placed = [];
-    base.forEach((b, i) => {
-      const col = cols === 2 ? i % 2 : 0, row = cols === 2 ? i >> 1 : i;
-      const y = (row - (rows - 1) / 2) * dy + (cols === 2 ? (col - 0.5) * dy * 0.4 : 0);
-      const C = new V3((col - (cols - 1) / 2) * 2 * halfX + b.jitter[0], y, b.jitter[1]);
-      const pl = makeSheet({ U: b.F.U.clone(), V: b.F.V.clone(), N: b.F.N.clone() }, C, b.def.rw * sc, b.def.rh * sc, b.def, mulberry32(P.seed * 31 + i * 7));
+  const sc = [1, 1.25, 1.1, 1, 0.9, 0.82, 0.76][count];
+  const kinds = shuffle([0, 1, 2], rng);
+  const todo = SHEETS.slice(0, count).map((def, i) => ({ def, i, f: 0.75 + rng() * 0.45 }))
+    .sort((a, b) => b.def.rw * b.f - a.def.rw * a.f);   // big sheets first
+  const placed = [];
+  for (const { def, i, f } of todo) {
+    let got = null;
+    for (let k = 0; !got; k++) {
+      const spread = (0.18 + 0.07 * count) * (1 + k / 300), shrink = Math.max(0.7, 1 - k / 1000);
+      const F = frame(...FRAMES[i < 3 ? kinds[i] : (rng() * 3) | 0]);
+      const a = rng() < 0.2 ? Math.PI : 0.6;
+      const q = new THREE.Quaternion().setFromEuler(new THREE.Euler((rng() - 0.5) * a, rng() * 6.28, (rng() - 0.5) * a, 'YXZ'));
+      F.U.applyQuaternion(q); F.V.applyQuaternion(q); F.N.applyQuaternion(q);
+      const C = new V3(rng() - 0.5, rng() - 0.5, rng() - 0.5).multiplyScalar(2 * spread);
+      const pl = makeSheet(F, C, def.rw * sc * f * shrink, def.rh * sc * f * shrink, def, mulberry32(P.seed * 31 + i * 7));
       pl.k1 *= 0.35; pl.k2 *= 0.35;   // large flakes: gently bowed, still wrinkled
       pl.samples = sheetSamples(pl);
-      placed.push(pl);
-    });
-    if (placed.every((pl, i) => clearOfSheets(pl, placed.slice(0, i))) || grow > 6) return placed;
+      if (clearOfSheets(pl, placed)) got = pl;
+    }
+    placed.push(got);
   }
+  return placed;
 }
 
 // centre height for a fiber of radius r lying on side `side` of pl at (s, t): it rests on
