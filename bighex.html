@@ -311,8 +311,8 @@ const R = { cAtom: 0.0045 * K, cc: 0.002 * K, gStick: 0.0019 * K, O: 0.0062 * K,
 // one sheet to the next. GO is impermeable, so no fiber passes through a sheet; fibers
 // that cross on the same face climb over each other instead of passing through.
 let SKIN = 0.035 * K, GAP = 0.004;        // set per build: groups shown or not (see build())
-// sheets never touch; fibers bend around where two sheets come close (follows the thickness slider)
-const sheetGap = () => 1.1 * P.radius + 2 * (SKIN + GAP) + 0.02;
+// sheets never touch (their oxygen groups keep apart); fibers bend around where two sheets come close
+const sheetGap = () => 2 * (SKIN + GAP) + 0.01;
 const AXES = [new V3(1, 0, 0), new V3(0, 1, 0), new V3(0, 0, 1)];
 function frame(u, v) {
   const U = new V3(...u).normalize(), Vf = new V3(...v);
@@ -326,7 +326,6 @@ function makeSheet(F, C, rw, rh, def, rng) {
 // height of the real (curved, wrinkled) sheet surface above its frame at in-plane (s, t)
 const height = (pl, s, t, w = P.wrinkle) => pl.k1 * s * s + pl.k2 * t * t
   + w * (pl.A * Math.sin(s * 11 + pl.f1) * Math.cos(t * 8 + pl.f2) + 0.008 * Math.sin(s * 31 + t * 23 + pl.f2));
-const wmax = pl => 2 * (pl.A + 0.008);    // largest wrinkle the slider allows
 // outline: rim(direction) in footprint units; shape() < rim() is on the sheet
 const rim = (pl, s, t) => { const th = Math.atan2(t / pl.rh, s / pl.rw);
   return 1 + 0.07 * Math.sin(3 * th + pl.p1) + 0.05 * Math.sin(5 * th + pl.p2) + 0.035 * Math.sin(8 * th + pl.p3); };
@@ -372,43 +371,41 @@ function clearOfSheets(pl, placed) {
   if (!placed.length) return true;
   const mine = sheetSamples(pl);
   for (const q of placed) {
-    const m = sheetGap() + wmax(pl) + wmax(q);
+    const m = sheetGap() + (P.wrinkle * (pl.A + 0.008)) + (P.wrinkle * (q.A + 0.008));
     for (const X of mine) if (nearSheet(q, X, m, 0)) return false;
     for (const X of q.samples) if (nearSheet(pl, X, m, 0)) return false;
   }
   return true;
 }
-// Sheets first: one loose, irregular cluster. Sheets lie at mixed angles (level, upright
-// one way, upright the other, tilted, now and then any angle) and vary in size. Each is
-// placed where it keeps sheetGap() from the others; the cluster only opens up when a
-// sheet finds no room, so every requested sheet is always placed. The fiber-count,
-// curve and wrinkle sliders do not move them.
-const FRAMES = [[[1, 0, 0], [0, 0, 1]], [[0, 0, 1], [0, 1, 0]], [[0, 1, 0], [1, 0, 0]]];   // normals y, x, z
+// Sheets first: one compact clump, the same size whatever the number of sheets. The sheets
+// sit on the faces of a cube around the centre (a single sheet goes through the middle),
+// each slightly turned and tilted, like the cage of flakes in the usual schematic. Their
+// size follows from the cube, leaving a gap at the cube's edges so neighbouring sheets
+// never touch. The fiber-count, curve and wrinkle sliders do not move them.
+const FACES = [[0, 1], [1, 1], [2, -1], [0, -1], [1, -1], [2, 1]];   // [axis, side]: top, right, front, bottom, left, back
 function placeSheets(count) {
   if (!count) return [];
   const rng = mulberry32(P.seed * 97 + 13);
-  const sc = [1, 1.25, 1.1, 1, 0.9, 0.82, 0.76][count] * 1.6;   // sheets about as wide as the network
-  const kinds = shuffle([0, 1, 2], rng);
-  const todo = SHEETS.slice(0, count).map((def, i) => ({ def, i, f: 0.75 + rng() * 0.45 }))
-    .sort((a, b) => b.def.rw * b.f - a.def.rw * a.f);   // big sheets first
-  const placed = [];
-  for (const { def, i, f } of todo) {
-    let got = null;
-    for (let k = 0; !got; k++) {
-      const spread = (0.18 + 0.07 * count) * (1 + k / 300), shrink = Math.max(0.7, 1 - k / 1000);
-      const F = frame(...FRAMES[i < 3 ? kinds[i] : (rng() * 3) | 0]);
-      const a = rng() < 0.2 ? Math.PI : 0.6;
-      const q = new THREE.Quaternion().setFromEuler(new THREE.Euler((rng() - 0.5) * a, rng() * 6.28, (rng() - 0.5) * a, 'YXZ'));
+  const A = 0.62;   // half-size of the cube the sheets sit on
+  const faces = [FACES[0], ...shuffle(FACES.slice(1), rng)].slice(0, count);
+  const jit = faces.map(() => [(rng() - 0.5) * 0.16, (rng() - 0.5) * 0.3, (rng() - 0.5) * 0.16, 0.85 + rng() * 0.25]);
+  for (let w = A - 0.08; ; w *= 0.95) {   // sheet half-width: shrink only until no two sheets touch
+    const placed = faces.map(([ax, sd], i) => {
+      const def = SHEETS[i], [tx, yaw, tz, f] = jit[i];
+      const U = [0, 0, 0], V = [0, 0, 0], C = [0, 0, 0];
+      U[(ax + 1) % 3] = 1; V[(ax + 2) % 3] = 1; C[ax] = count === 1 ? 0 : sd * A;
+      const F = frame(U, V);
+      const q = new THREE.Quaternion().setFromAxisAngle(F.N, yaw)
+        .premultiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(tx, 0, tz)));
       F.U.applyQuaternion(q); F.V.applyQuaternion(q); F.N.applyQuaternion(q);
-      const C = new V3(rng() - 0.5, rng() - 0.5, rng() - 0.5).multiplyScalar(2 * spread);
-      const pl = makeSheet(F, C, def.rw * sc * f * shrink, def.rh * sc * f * shrink, def, mulberry32(P.seed * 31 + i * 7));
+      const s = (count === 1 ? 1.15 : 1) * w / 1.16;   // 1.16: the irregular outline reaches past rw
+      const pl = makeSheet(F, new V3(...C), s * Math.min(1, f + 0.1), s * Math.min(1, 1.1 - (f - 0.85)), def, mulberry32(P.seed * 31 + i * 7));
       pl.k1 *= 0.35; pl.k2 *= 0.35;   // large flakes: gently bowed, still wrinkled
       pl.samples = sheetSamples(pl);
-      if (clearOfSheets(pl, placed)) got = pl;
-    }
-    placed.push(got);
+      return pl;
+    });
+    if (placed.every((pl, i) => clearOfSheets(pl, placed.slice(0, i))) || w < 0.05) return placed;
   }
-  return placed;
 }
 
 // centre height for a fiber of radius r lying on side `side` of pl at (s, t): it rests on
@@ -439,7 +436,7 @@ function tail(E, T, pl, side, rng) {
   const out = [];
   for (let j = 1; j <= 5; j++) {
     const u = j / 5 * len;
-    out.push(E.clone().addScaledVector(T, u).addScaledVector(pl.N, up * u * u * 2).addScaledVector(lat, u * u * 2).clampScalar(-0.75, 0.75));
+    out.push(E.clone().addScaledVector(T, u).addScaledVector(pl.N, up * u * u * 2).addScaledVector(lat, u * u * 2).clampScalar(-1.2, 1.2));
   }
   return out;
 }
