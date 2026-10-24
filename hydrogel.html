@@ -193,8 +193,8 @@ const PRESETS = [
   { a: '#a8e0d6', b: '#b1c3f0' },
   { a: '#c4e3a8', b: '#9fd3e6' },
 ];
-const SAVE_KEY = 'cellGO3d.lanes2';
-const DEF = { seed: 11, colorA: PRESETS[0].a, colorB: PRESETS[0].b, colorC: '#3b4654', colorO: '#e2725f', finish: 'frost', dist: 'alternate', perAxis: 4, radius: 0.043, curve: 1, sheets: 3, wrinkle: 1, density: 0.35, atoms: false, spin: false };
+const SAVE_KEY = 'cellGO3d.clump1';
+const DEF = { seed: 11, colorA: PRESETS[0].a, colorB: PRESETS[0].b, colorC: '#3b4654', colorO: '#e2725f', finish: 'frost', dist: 'alternate', perAxis: 4, radius: 0.034, curve: 1, sheets: 3, wrinkle: 1, density: 0.35, atoms: false, spin: false };
 const P = Object.assign({}, DEF, JSON.parse(localStorage.getItem(SAVE_KEY) || '{}'));
 for (const [k, lo, hi] of [['perAxis', 3, 6], ['radius', 0.028, 0.055], ['curve', 0, 1.6], ['wrinkle', 0, 1.5]]) P[k] = Math.min(hi, Math.max(lo, P[k]));
 const save = () => localStorage.setItem(SAVE_KEY, JSON.stringify(P));
@@ -269,84 +269,144 @@ const stickM = (p, q, r) => { const d = new V3().subVectors(q, p); const L = d.l
   return new THREE.Matrix4().compose(p.clone().add(q).multiplyScalar(0.5), new THREE.Quaternion().setFromUnitVectors(Y, d.divideScalar(L)), new V3(r, L, r)); };
 const ballM = (p, r) => new THREE.Matrix4().compose(p, new THREE.Quaternion(), new V3(r, r, r));
 
-// ---------- hydrogel fibers ----------
-// Structure: 4 fibers per axis run along the edges of a cage (staggered so crossing fibers pass
-// each other); GO flakes rest on the outside of the cage faces. Cage fibers only bow inward and
-// extra fibers lie on the outside of the flakes and only bow outward, so no fiber can reach
-// through a flake whatever the sliders say. A flake is only rounded off (and, if that is not
-// enough, shrunk) where fibers pass its corners, so it keeps its size.
-const FACES = [[1, 1], [2, -1], [0, -1], [0, 1], [1, -1], [2, 1]];   // top, back, left, right, bottom, front
-const EDGE = 0.28, STAG = 0.12;
-const facePlane = () => EDGE + STAG + P.radius * 1.1 + gapF() + 0.004 * LS;
-// Flakes look crumpled and dropped in at random: which cage faces they rest on, their tilt,
-// turn, size and shape all vary with the seed. Each flake is bent as a whole (hammock or
-// saddle, its edges curling away from the cage) and creased by a few random folds; the
-// wrinkle slider sets how hard it is crumpled.
-function faceSheets() {
-  const rng = mulberry32(P.seed * 97 + 13);
-  const faces = [FACES[0], ...shuffle(FACES.slice(1), rng)];
-  return faces.slice(0, P.sheets).map(([ax, sd], i) => {
-    const def = SHEETS[i], r2 = mulberry32(P.seed * 31 + i);
-    const U = new V3(), Vv = new V3(); U.setComponent((ax + 1) % 3, 1); Vv.setComponent((ax + 2) % 3, 1);
-    const N = new V3().crossVectors(U, Vv);
-    const q = new THREE.Quaternion().setFromAxisAngle(N, (rng() - 0.5) * 1.6)
-      .premultiply(new THREE.Quaternion().setFromEuler(new THREE.Euler((rng() - 0.5) * 0.62, (rng() - 0.5) * 0.62, (rng() - 0.5) * 0.62)));
-    U.applyQuaternion(q); Vv.applyQuaternion(q); N.applyQuaternion(q);
-    const C = new V3(); C.setComponent(ax, sd * (facePlane() + 0.03 + rng() * 0.05));
-    C.addScaledVector(U, (rng() - 0.5) * 0.12).addScaledVector(Vv, (rng() - 0.5) * 0.12);
-    const s0 = EDGE + STAG + P.radius * 0.4, out = Math.sign(N.dot(C)) || 1;   // +1: the flake's N points away from the cage
-    const folds = [...Array(4)].map(() => { const th = r2() * 6.28, kk = 7 + r2() * 6;
-      return [kk * Math.cos(th), kk * Math.sin(th), 0.03 + r2() * 0.03, r2() * 6.28]; });
-    return { U, V: Vv, N, C, ax, sd, rw: s0 * (0.8 + 0.35 * r2()), rh: s0 * (0.8 + 0.35 * r2()), pe: 3.4,
-      k1: out * (0.6 + r2() * 0.9), k2: out * (r2() * 1.4 - 0.4), A: def.A, folds,   // mostly curling away, now and then a saddle
-      f1: r2() * 6.28, f2: r2() * 6.28, p1: r2() * 6.28, p2: r2() * 6.28, p3: r2() * 6.28, rng: r2 };
-  });
+// ---------- hydrogel fibers and GO flakes: one disordered clump ----------
+// Nothing is laid out on a grid. Flakes are dropped round a ball at random positions and
+// angles, each crumpled (bent as a whole and creased by random folds), and kept apart so
+// no two flakes touch; if the ball is crowded a flake is made smaller, never moved out.
+// Each fiber runs from one random side of the ball to another along a randomly bent path,
+// threaded through the gaps between flakes. GO is impermeable: where a fiber cannot avoid a
+// flake, the flake is trimmed back or the fiber ends before it (see resolve()). The
+// "random layout" button draws a new clump; every slider still applies.
+const CLUMP = 0.42;   // radius of the ball the clump fills
+function randomUnit(rng) {
+  const z = rng() * 2 - 1, a = rng() * 6.283, r = Math.sqrt(1 - z * z);
+  return new V3(r * Math.cos(a), r * Math.sin(a), z);
 }
-function fiberPaths(rng, sheets) {
-  const paths = []; let k = 0;
-  const hasSheet = (a, s) => sheets.some(p => p.ax === a && p.sd === s) ? 1 : 0;
-  for (let ax = 0; ax < 3; ax++) {
-    const b = (ax + 1) % 3, c = (ax + 2) % 3;
-    const corners = shuffle([[1, 1], [-1, 1], [1, -1], [-1, -1]], rng);
-    const outer = shuffle([[b, 1], [b, -1], [c, 1], [c, -1]], rng).sort((p, q) => hasSheet(...q) - hasSheet(...p));
-    for (let f = 0; f < P.perAxis; f++, k++) {
-      const r = P.radius * (0.9 + rng() * 0.2);
-      const useA = P.dist === 'alternate' ? k % 2 === 0 : P.dist === 'axis' ? ax !== 1 : rng() < 0.5;
-      const n = 180, pts = [], ph = rng() * 6.28;
-      let lane;
-      if (f < 4) {
-        const [i, j] = corners[f], Bb = i * EDGE, Bc = j * (EDGE + STAG);
-        const L0 = 0.5 + rng() * 0.18, L1 = 0.5 + rng() * 0.18;
-        const j0b = rng() * 0.025, j0c = rng() * 0.025, tb = rng() * 0.04, tc = rng() * 0.04, fb = rng() < 0.5, fc = rng() < 0.5;
-        const sat = x => 0.2 * Math.tanh(x / 0.2), kb = sat((0.04 + rng() * 0.08) * P.curve), kc = sat((0.04 + rng() * 0.08) * P.curve), wb = rng() * 0.7, wc = rng() * 0.7;
-        for (let m = 0; m <= n; m++) {
-          const u = m / n, bump = Math.pow(Math.sin(Math.PI * u), 1.2);
-          const db = j0b + tb * (fb ? u : 1 - u) + kb * bump * (1 + wb * Math.sin(2 * Math.PI * u + ph)) / (1 + wb);
-          const dc = j0c + tc * (fc ? u : 1 - u) + kc * bump * (1 + wc * Math.sin(2 * Math.PI * u + ph * 1.7)) / (1 + wc);
-          const v = new V3(); v.setComponent(ax, -L0 + u * (L0 + L1)); v.setComponent(b, Bb - i * db); v.setComponent(c, Bc - j * dc);
-          pts.push(v);
-        }
-        lane = { type: 'cage', cons: [[b, i, EDGE], [c, j, EDGE + STAG]] };
-      } else {
-        const [fa, fs] = outer[(f - 4) % 4], pl = sheets.find(p => p.ax === fa && p.sd === fs);
-        const other = fa === b ? c : b, lift = facePlane() + (pl ? P.wrinkle * pl.A + 0.035 : 0) + r + gapF() + 0.01 * LS;
-        const L0 = 0.42 + rng() * 0.16, L1 = 0.42 + rng() * 0.16, off = (rng() - 0.5) * 1.1 * EDGE;
-        const kl = 0.08 * Math.tanh((0.02 + rng() * 0.05) * P.curve / 0.08), ks = 0.1 * Math.tanh((rng() - 0.5) * 0.12 * P.curve / 0.1);
-        for (let m = 0; m <= n; m++) {
-          const u = m / n, bump = Math.sin(Math.PI * u);
-          const v = new V3(); v.setComponent(ax, -L0 + u * (L0 + L1));
-          v.setComponent(fa, fs * (lift + kl * bump)); v.setComponent(other, off + ks * Math.sin(Math.PI * u + ph));
-          pts.push(v);
-        }
-        lane = { type: 'outer', fa, fs, min: lift };
-      }
-      paths.push({ pts, r, useA, k, lane });
+function clumpSheets() {
+  const rng = mulberry32(P.seed * 97 + 13), out = [];
+  for (let i = 0; i < P.sheets; i++) {
+    const def = SHEETS[i];
+    let got = null;
+    for (let k = 0; !got; k++) {
+      const g = Math.max(0.2, 1 - k / 100), r2 = mulberry32(P.seed * 31 + i * 101 + k);
+      // toward the outside of the clump, facing roughly outward at a random tilt, so flakes
+      // wrap the clump and stay in view
+      const dir = randomUnit(rng), C = dir.clone().multiplyScalar(CLUMP * (0.45 + 0.4 * rng()));
+      const N = dir.clone().addScaledVector(randomUnit(rng), 0.9).normalize(), U = new V3().crossVectors(N, randomUnit(rng)).normalize(), Vv = new V3().crossVectors(N, U);
+      const s0 = 0.42 * g;
+      const folds = [...Array(4)].map(() => { const th = r2() * 6.28, kk = 7 + r2() * 6;
+        return [kk * Math.cos(th), kk * Math.sin(th), 0.03 + r2() * 0.03, r2() * 6.28]; });
+      const pl = { U, V: Vv, N, C, rw: s0 * (0.8 + 0.4 * r2()), rh: s0 * (0.8 + 0.4 * r2()), pe: 2.6,
+        k1: (r2() - 0.5) * 2.6, k2: (r2() - 0.5) * 2.6, A: def.A, folds,
+        f1: r2() * 6.28, f2: r2() * 6.28, p1: r2() * 6.28, p2: r2() * 6.28, p3: r2() * 6.28, rng: r2 };
+      if (k > 600 || !out.some(o => sheetsTouch(o, pl))) got = pl;
     }
+    out.push(got);
+  }
+  return out;
+}
+function clumpFibers(rng, sheets) {
+  const paths = [], total = 3 * P.perAxis;
+  for (let k = 0; k < total; k++) {
+    const r = P.radius * (0.9 + rng() * 0.2);
+    const useA = P.dist === 'alternate' ? k % 2 === 0 : P.dist === 'axis' ? k % 3 !== 1 : rng() < 0.5;
+    let best = null;
+    for (let tr = 0; tr < 50 && !(best && best.hits === 0); tr++) {
+      const a = randomUnit(rng), b = randomUnit(rng);
+      if (a.dot(b) > -0.1) continue;   // ends on roughly opposite sides, so the fiber crosses the clump
+      const p0 = a.multiplyScalar(CLUMP * (1 + rng() * 0.3)), p3 = b.multiplyScalar(CLUMP * (1 + rng() * 0.3));
+      const bend = 0.28 * P.curve;
+      const p1 = p0.clone().lerp(p3, 0.33).addScaledVector(randomUnit(rng), bend * rng());
+      const p2 = p0.clone().lerp(p3, 0.66).addScaledVector(randomUnit(rng), bend * rng());
+      const pts = new THREE.CatmullRomCurve3([p0, p1, p2, p3], false, 'centripetal').getSpacedPoints(180);
+      const f = { pts, r, useA, k, lane: { type: 'free' } };
+      const hits = sheets.reduce((s, pl) => s + crossings(pl, [f], 0).length, 0);
+      if (!best || hits < best.hits) best = { f, hits };
+    }
+    if (best) paths.push(best.f);
   }
   return paths;
 }
+// bend a fiber round every flake it would pass through, so flakes keep their size: a stretch
+// crossing a flake is pushed sideways past the nearest edge, a stretch lying along a face is
+// lifted off it; the bends are then smoothed, keeping only passes that stay clear
+const footN = (pl, s, t, m = 0) => { const e = pl.pe || 2.6;
+  return Math.pow(Math.pow(Math.abs(s) / (pl.rw + m), e) + Math.pow(Math.abs(t) / (pl.rh + m), e), 1 / e) / rimOf(pl, s, t); };
+function nearFlake(pl, X, m) { const l = local(pl, X); return Math.abs(l.h) < m && footN(pl, l.s, l.t, m) < 1; }
+function steer(f, sheets) {
+  const m = f.r + gapF() + 0.015 * LS, last = f.pts.length - 1;
+  let pts = f.pts.map(p => p.clone());
+  const clear = Q => !sheets.some(pl => Q.some(X => nearFlake(pl, X, m)));
+  for (let it = 0; it < 60; it++) {
+    let moved = false;
+    for (const pl of sheets) {
+      const bad = [];
+      pts.forEach((X, i) => { if (nearFlake(pl, X, m)) bad.push(i); });
+      if (!bad.length) continue;
+      moved = true;
+      const runs = [];
+      for (const i of bad) { const r = runs[runs.length - 1]; if (r && i === r[1] + 1) r[1] = i; else runs.push([i, i]); }
+      for (const [a, b] of runs) {
+        const lo = Math.max(a - 3, 0), hi = Math.min(b + 3, last), hA = local(pl, pts[lo]).h, hB = local(pl, pts[hi]).h;
+        if (a > 0 && b < last && hA * hB < 0) {   // crosses: sideways, toward the nearer edge
+          const T = pts[hi].clone().sub(pts[lo]);
+          let ps = -T.dot(pl.V), pt = T.dot(pl.U); const len = Math.hypot(ps, pt) || 1; ps /= len; pt /= len;
+          let ms = 0, mt = 0;
+          for (let i = a; i <= b; i++) { const l = local(pl, pts[i]); ms += l.s / pl.rw; mt += l.t / pl.rh; }
+          if (ps * ms + pt * mt < 0) { ps = -ps; pt = -pt; }
+          for (let i = lo; i <= hi; i++) {
+            const l = local(pl, pts[i]); let lam = 0;
+            while (lam < 2 && footN(pl, l.s + lam * ps, l.t + lam * pt, m) < 1.05) lam += 0.01;
+            pts[i].addScaledVector(pl.U, lam * ps).addScaledVector(pl.V, lam * pt);
+          }
+        } else {                                   // lies along a face: lift it off that face
+          const side = (a === 0 ? hB : b === last ? hA : hA + hB) >= 0 ? 1 : -1;
+          for (let i = a; i <= b; i++) pts[i].addScaledVector(pl.N, side * (m + 0.006) - local(pl, pts[i]).h);
+        }
+      }
+    }
+    if (!moved) {
+      if (it) for (let pass = 0; pass < 20; pass++) {
+        const q = pts.map(v => v.clone());
+        for (let i = 1; i < last; i++) q[i].copy(pts[i - 1]).add(pts[i + 1]).multiplyScalar(0.25).addScaledVector(pts[i], 0.5);
+        if (!clear(q)) break;
+        pts = q;
+      }
+      f.pts = pts; return true;
+    }
+    smoothPts(pts, 2);
+    pts = new THREE.CatmullRomCurve3(pts, false, 'centripetal').getSpacedPoints(last);
+  }
+  f.pts = pts; return false;   // still meets a flake: resolve() trims the flake or ends the fiber
+}
+// last guarantee, after the flakes have been draped: wherever a fiber still meets a flake's
+// final surface (crossing it, or closer than its own radius), the fiber is cut back to its
+// longest clean stretch, so nothing passes through a flake whatever the sliders say
+function finalCut(paths, live) {
+  for (let fi = paths.length - 1; fi >= 0; fi--) {
+    const f = paths[fi], n = f.pts.length, bad = new Uint8Array(n), Rr = f.r + 0.008 * LS;
+    for (const pl of live) {
+      let prev = null;
+      f.pts.forEach((X, i) => {
+        _dl.subVectors(X, pl.C);
+        const s = _dl.dot(pl.U), t = _dl.dot(pl.V), h = _dl.dot(pl.N) - sheetH(pl, s, t);
+        if (inFoot(pl, s, t, Rr) && (Math.abs(h) < Rr || (prev !== null && (h < 0) !== (prev < 0)))) for (let j = Math.max(0, i - 4); j <= Math.min(n - 1, i + 4); j++) bad[j] = 1;
+        prev = h;
+      });
+    }
+    if (!bad.some(Boolean)) continue;
+    let best = [0, -1], st = -1;
+    for (let i = 0; i <= n; i++) {
+      if (i < n && !bad[i]) { if (st < 0) st = i; continue; }
+      if (st >= 0 && i - 1 - st > best[1] - best[0]) best = [st, i - 1];
+      st = -1;
+    }
+    if (best[1] - best[0] < 30) paths.splice(fi, 1); else f.pts = f.pts.slice(best[0], best[1] + 1);
+  }
+}
 function clampLane(f) {
   const L = f.lane;
+  if (L.type === 'free') return;   // clump fibers have no lane to keep to
   for (const X of f.pts) {
     if (L.type === 'cage') for (const [ci, sg, B] of L.cons) { const v = Math.min(B, Math.max(B - 0.24, sg * X.getComponent(ci))); X.setComponent(ci, sg * v); }
     else if (L.fs * X.getComponent(L.fa) < L.min) X.setComponent(L.fa, L.fs * L.min);
@@ -742,9 +802,11 @@ let current = null, first = true;
 function build() {
   const rng = mulberry32(P.seed);
   const model = new THREE.Group(); model.name = 'Cellulose_GO_hydrogel';
-  const sheets0 = faceSheets();
-  const paths = fiberPaths(rng, sheets0);
+  const sheets0 = clumpSheets();
+  const paths = clumpFibers(rng, sheets0);
+  paths.forEach(f => steer(f, sheets0));
   const live = resolve(paths, sheets0);
+  finalCut(paths, live);
   model.add(fiberMeshes(paths));
   const FH = fiberHash(paths);
   const go = new THREE.Group(); go.name = 'graphene_oxide';
