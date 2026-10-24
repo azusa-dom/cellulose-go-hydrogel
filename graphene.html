@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Graphene · 石墨烯网</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <script type="importmap">
 {
   "imports": {
@@ -53,6 +53,12 @@
   .pages a:hover { color: #1b2733; background: rgba(27,39,51,.04); }
   .pages a.on { background: #1f3b55; color: #fff; }
   .pages a i { font-style: normal; font-size: 11px; opacity: .7; font-variant-numeric: tabular-nums; }
+  .panel, .pages, .presets button, .svgbtn { touch-action: manipulation; }
+  @media (max-width: 640px) {
+    .pages { top: 10px; }
+    .label { top: 62px; left: 16px; }
+    .panel { top: auto; bottom: calc(64px + env(safe-area-inset-bottom)); left: 16px; right: 16px; width: auto; }
+  }
 </style>
 </head>
 <body>
@@ -224,8 +230,12 @@ applyStyle();
 if (S.atomS !== 1 || S.bondS !== 1) rebuildSizes();
 stage._ground.material.opacity = 0.22;
 const sph = box.getBoundingSphere(new THREE.Sphere());
-const dist = stage._camera.position.distanceTo(sph.center) * 0.6;
+const dist = stage._camera.position.distanceTo(sph.center) * 0.6 * Math.max(1, 1 / stage._camera.aspect);
 stage._camera.position.copy(sph.center).add(new THREE.Vector3(0.3, 1.0, 0.95).normalize().multiplyScalar(dist));
+if (stage._camera.aspect < 0.8) {   // phone: the panel covers the lower half, so raise the sheet into the free top half
+  const lift = new THREE.Vector3(0, sph.radius * 0.35, 0);
+  stage._camera.position.sub(lift); stage._controls.target.sub(lift);
+}
 stage._controls.update();
 
 // ---- vector export of the current camera view ---------------------------

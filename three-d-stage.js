@@ -71,6 +71,7 @@
       display: block;
       width: 100%;
       height: 100vh;
+      height: 100dvh;
       background: var(--stage-bg, #f0eee6);
       overflow: hidden;
     }
