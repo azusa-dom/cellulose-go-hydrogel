@@ -244,8 +244,9 @@ const stickM = (p, q, r) => { const d = new V3().subVectors(q, p); const L = d.l
 const ballM = (p, r) => new THREE.Matrix4().compose(p, new THREE.Quaternion(), new V3(r, r, r));
 
 // ---------- hydrogel fibers ----------
+// Centre-lines only; meshes are made after the sheets are placed, because fibers
+// that would pass through a sheet get bent around it first.
 function buildFibers(rng) {
-  const grp = new THREE.Group(); grp.name = 'hydrogel_network';
   const paths = [];
   let k = 0;
   for (let ax = 0; ax < 3; ax++) {
@@ -262,24 +263,31 @@ function buildFibers(rng) {
         const v = [0, 0, 0]; v[ax] = s; v[b] = ob + tb * s * 2 + bb * wa; v[c] = oc + tc * s * 2 + bc * ws;
         return new V3(...v);
       });
-      const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
       const r = P.radius * (0.9 + rng() * 0.2);
-      paths.push({ pts: curve.getSpacedPoints(160), r });
-      const tube = new THREE.TubeGeometry(curve, 100, r, 40, false); tube.deleteAttribute('uv');
-      // softly rounded end caps (flattened hemispheres) read better than hard discs
-      const caps = [[0, -1], [1, 1]].map(([t, sgn]) => {
-        const out = curve.getTangent(t).multiplyScalar(sgn);
-        const g = new THREE.SphereGeometry(r, 40, 10, 0, Math.PI * 2, 0, Math.PI / 2); g.deleteAttribute('uv');
-        g.applyMatrix4(new THREE.Matrix4().compose(curve.getPoint(t), new THREE.Quaternion().setFromUnitVectors(Y, out), new V3(1, 0.35, 1)));
-        return g;
-      });
       const useA = P.dist === 'alternate' ? k % 2 === 0 : P.dist === 'axis' ? ax !== 1 : rng() < 0.5;
-      const mesh = new THREE.Mesh(merge([tube, ...caps]), useA ? mats.A : mats.B);
-      mesh.name = `fiber_${String(k + 1).padStart(2, '0')}_${useA ? 'A' : 'B'}`;
-      grp.add(mesh); k++;
+      paths.push({ pts: new THREE.CatmullRomCurve3(pts, false, 'centripetal').getSpacedPoints(160), r, useA, k });
+      k++;
     }
   }
-  return { grp, paths };
+  return paths;
+}
+function fiberMeshes(paths) {
+  const grp = new THREE.Group(); grp.name = 'hydrogel_network';
+  for (const { pts, r, useA, k } of paths) {
+    const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
+    const tube = new THREE.TubeGeometry(curve, 160, r, 40, false); tube.deleteAttribute('uv');
+    // softly rounded end caps (flattened hemispheres) read better than hard discs
+    const caps = [[0, -1], [1, 1]].map(([t, sgn]) => {
+      const out = curve.getTangent(t).multiplyScalar(sgn);
+      const g = new THREE.SphereGeometry(r, 40, 10, 0, Math.PI * 2, 0, Math.PI / 2); g.deleteAttribute('uv');
+      g.applyMatrix4(new THREE.Matrix4().compose(curve.getPoint(t), new THREE.Quaternion().setFromUnitVectors(Y, out), new V3(1, 0.35, 1)));
+      return g;
+    });
+    const mesh = new THREE.Mesh(merge([tube, ...caps]), useA ? mats.A : mats.B);
+    mesh.name = `fiber_${String(k + 1).padStart(2, '0')}_${useA ? 'A' : 'B'}`;
+    grp.add(mesh);
+  }
+  return grp;
 }
 
 // ---------- graphene oxide sheets ----------
@@ -294,10 +302,11 @@ const SHEETS = [
 const BOND = 0.02;
 const R = { cAtom: 0.0045, cc: 0.002, gStick: 0.0019, O: 0.0062, H: 0.004 };
 
-// ---------- sheet placement: no fiber may pass through a GO sheet ----------
-// A sheet keeps its designed pose when that pose is clear of every fiber and every
-// sheet already placed; otherwise it is moved, tilted and if needed shrunk until it
-// fits in a gap of the network. A sheet that fits nowhere is left out.
+// ---------- GO sheets are impermeable: no fiber passes through a sheet ----------
+// Each requested sheet is placed: in its designed pose if that is clear of the fibers,
+// else in a gap of the network (moved, tilted, shrunk step by step to 30 %). If no gap
+// is big enough, the small pose touching the fewest fibers is kept and those fibers are
+// bent around the sheet's edge, as flexible chains would be. Sheets never touch each other.
 const SKIN = 0.035, GAP = 0.012;   // functional groups reach ~0.035 off the basal plane
 const AXIS_FRAMES = [[[1, 0, 0], [0, 0, 1]], [[0, 0, 1], [0, 1, 0]], [[1, 0, 0], [0, 1, 0]]];
 function frame(u, v) {
@@ -306,16 +315,23 @@ function frame(u, v) {
   return { U, V: Vf, N: new V3().crossVectors(U, Vf) };
 }
 const lift = (pl, s, t) => pl.k1 * s * s + pl.k2 * t * t;
-const reach = pl => P.wrinkle * (pl.A + 0.008);   // wrinkle amplitude off the mean surface
+// wrinkle amplitude off the mean surface: the current one when bending fibers, the slider's
+// middle value when placing (so dragging 褶皱 does not move sheets), its maximum between sheets
+const reach = (pl, w = P.wrinkle) => w * (pl.A + 0.008);
+const shape = (pl, s, t, m) => Math.pow(Math.pow(Math.abs(s) / (pl.rw + m), 2.6) + Math.pow(Math.abs(t) / (pl.rh + m), 2.6), 1 / 2.6);
 const _d = new V3();
+function local(pl, X) {
+  _d.subVectors(X, pl.C);
+  const s = _d.dot(pl.U), t = _d.dot(pl.V);
+  return { s, t, h: _d.dot(pl.N) - lift(pl, s, t) };
+}
 // is world point X within m of sheet pl (footprint grown by m)?
-function nearSheet(pl, X, m) {
+function nearSheet(pl, X, m, w) {
   _d.subVectors(X, pl.C);
   const lim = Math.max(pl.rw, pl.rh) * 1.2 + m + 0.3;
   if (_d.lengthSq() > lim * lim) return false;
-  const s = _d.dot(pl.U), t = _d.dot(pl.V);
-  if (Math.abs(_d.dot(pl.N) - lift(pl, s, t)) >= m + reach(pl)) return false;
-  return Math.pow(Math.pow(Math.abs(s) / (pl.rw + m), 2.6) + Math.pow(Math.abs(t) / (pl.rh + m), 2.6), 1 / 2.6) < 1.2;
+  const { s, t, h } = local(pl, X);
+  return Math.abs(h) < m + reach(pl, w) && shape(pl, s, t, m) < 1.2;
 }
 function sheetSamples(pl) {
   const out = [];
@@ -327,21 +343,26 @@ function sheetSamples(pl) {
   }
   return out;
 }
-function isClear(pl, fibers, placed) {
-  for (const f of fibers) { const m = f.r + SKIN + GAP; for (const X of f.pts) if (nearSheet(pl, X, m)) return false; }
+function clearOfSheets(pl, placed) {
   if (!placed.length) return true;
   const mine = sheetSamples(pl);
   for (const q of placed) {
-    for (const X of mine) if (nearSheet(q, X, 2 * SKIN + GAP + reach(pl))) return false;
-    for (const X of q.samples) if (nearSheet(pl, X, 2 * SKIN + GAP + reach(q))) return false;
+    for (const X of mine) if (nearSheet(q, X, 2 * SKIN + GAP + reach(pl, 2), 2)) return false;
+    for (const X of q.samples) if (nearSheet(pl, X, 2 * SKIN + GAP + reach(q, 2), 2)) return false;
   }
   return true;
+}
+function fiberHits(pl, fibers) {
+  let n = 0;
+  for (const f of fibers) { const m = f.r + SKIN + GAP; for (const X of f.pts) if (nearSheet(pl, X, m, 1)) n++; }
+  return n;
 }
 function placeSheets(fibers, count) {
   const placed = [];
   SHEETS.slice(0, count).forEach((def, i) => {
     const rng = mulberry32(P.seed * 97 + i * 7919);
-    for (const sc of [1, 0.85, 0.72, 0.6, 0.5, 0.42, 0.36, 0.3]) {
+    let best = null;
+    for (const sc of [1, 0.85, 0.72, 0.6, 0.5, 0.42, 0.36, 0.3, 0.24]) {
       for (let k = 0; k < 120; k++) {
         const free = k > 0;   // attempt 0 at each size is the designed pose
         const roll = rng();
@@ -356,11 +377,89 @@ function placeSheets(fibers, count) {
         const C = (!free ? new V3(...def.c).addScaledVector(jitter, 0.03)
           : rng() < 0.5 ? new V3(...def.c).addScaledVector(jitter, 0.6) : jitter.multiplyScalar(0.84)).clampScalar(-0.42, 0.42);
         const pl = { ...F, C, rw: def.rw * sc, rh: def.rh * sc, k1: def.k1, k2: def.k2, A: def.A };
-        if (isClear(pl, fibers, placed)) { pl.samples = sheetSamples(pl); placed.push(pl); return; }
+        if (!clearOfSheets(pl, placed)) continue;
+        const n = fiberHits(pl, fibers);
+        if (n === 0) { best = { pl, n }; break; }
+        if (sc <= 0.42 && (!best || n < best.n)) best = { pl, n };
       }
+      if (best && best.n === 0) break;
     }
+    if (best) { best.pl.samples = sheetSamples(best.pl); placed.push(best.pl); }
   });
   return placed;
+}
+// Bend one fiber until it is clear of every sheet. A stretch that crosses a sheet is
+// pushed sideways past the nearest edge; a stretch that only lies against a face is
+// pushed off that face. Returns false if it could not be cleared.
+function deflect(f, sheets) {
+  const m = f.r + SKIN + GAP;
+  let pts = f.pts.map(p => p.clone());
+  const last = pts.length - 1;
+  const othersHit = (pl, Xs) => sheets.reduce((n, q) => q === pl ? n : n + Xs.filter(X => nearSheet(q, X, m)).length, 0);
+  for (let it = 0; it < 80; it++) {
+    let moved = false;
+    for (const pl of sheets) {
+      const bad = [];
+      pts.forEach((X, i) => { if (nearSheet(pl, X, m)) bad.push(i); });
+      if (!bad.length) continue;
+      moved = true;
+      const runs = [];
+      for (const i of bad) { const r = runs[runs.length - 1]; if (r && i === r[1] + 1) r[1] = i; else runs.push([i, i]); }
+      const zone = m + reach(pl);
+      for (const [a, b] of runs) {
+        const hA = local(pl, pts[Math.max(a - 3, 0)]).h, hB = local(pl, pts[Math.min(b + 3, last)]).h;
+        const crosses = a > 0 && b < last && hA * hB < 0;
+        if (crosses) {
+          // sideways, perpendicular to the fiber's direction across the sheet, toward the nearer edge
+          const T = pts[Math.min(b + 1, last)].clone().sub(pts[Math.max(a - 1, 0)]);
+          let ps = -T.dot(pl.V), pt = T.dot(pl.U);
+          const len = Math.hypot(ps, pt) || 1; ps /= len; pt /= len;
+          let ms = 0, mt = 0;
+          for (let i = a; i <= b; i++) { const L = local(pl, pts[i]); ms += L.s / pl.rw; mt += L.t / pl.rh; }
+          if (ps * ms + pt * mt < 0) { ps = -ps; pt = -pt; }
+          const lo = Math.max(a - 2, 0), hi = Math.min(b + 2, last);
+          const push = sgn => { const out = []; let cost = 0;
+            for (let i = lo; i <= hi; i++) {
+              const L = local(pl, pts[i]);
+              let lam = 0;
+              while (lam < 2 && shape(pl, L.s + lam * sgn * ps, L.t + lam * sgn * pt, m) < 1.25) lam += 0.01;
+              cost += lam; out.push(pts[i].clone().addScaledVector(pl.U, lam * sgn * ps).addScaledVector(pl.V, lam * sgn * pt));
+            }
+            return { out, cost, hit: othersHit(pl, out) }; };
+          const near = push(1), far = push(-1);
+          const go = far.hit < near.hit || (far.hit === near.hit && far.cost < near.cost) ? far : near;
+          go.out.forEach((X, j) => pts[lo + j].copy(X));
+        } else {
+          let hs = 0;
+          for (let i = a; i <= b; i++) hs += local(pl, pts[i]).h;
+          const pref = (a === 0 ? hB : b === last ? hA : hs) >= 0 ? 1 : -1;
+          const push = side => { const out = [];
+            for (let i = a; i <= b; i++) out.push(pts[i].clone().addScaledVector(pl.N, side * (zone + 0.006) - local(pl, pts[i]).h));
+            return { out, hit: othersHit(pl, out) }; };
+          const same = push(pref), other = push(-pref);
+          (other.hit < same.hit ? other : same).out.forEach((X, j) => pts[a + j].copy(X));
+        }
+      }
+    }
+    if (!moved) {
+      // round off the bends, keeping only smoothing passes that stay clear
+      const clear = Xs => !sheets.some(pl => Xs.some(X => nearSheet(pl, X, m)));
+      for (let pass = 0; pass < 30; pass++) {
+        const q = pts.map(p => p.clone());
+        for (let i = 1; i < last; i++) q[i].copy(pts[i - 1]).add(pts[i + 1]).multiplyScalar(0.25).addScaledVector(pts[i], 0.5);
+        if (!clear(q)) break;
+        pts = q;
+      }
+      f.pts = pts; return true;
+    }
+    for (let pass = 0; pass < 2; pass++) {   // keep the bend smooth
+      const q = pts.map(p => p.clone());
+      for (let i = 1; i < last; i++) pts[i].copy(q[i - 1]).add(q[i + 1]).multiplyScalar(0.25).addScaledVector(q[i], 0.5);
+    }
+    pts = new THREE.CatmullRomCurve3(pts, false, 'centripetal').getSpacedPoints(last);
+  }
+  f.pts = pts;
+  return !sheets.some(pl => pts.some(X => nearSheet(pl, X, m)));
 }
 
 function buildSheet(def, n, rng) {
@@ -481,10 +580,24 @@ let current = null, first = true;
 function build() {
   const rng = mulberry32(P.seed);
   const model = new THREE.Group(); model.name = 'Cellulose_GO_hydrogel';
-  const fib = buildFibers(rng);
-  model.add(fib.grp);
+  const paths = buildFibers(rng);
+  let sheets = placeSheets(paths, P.sheets);
+  const straight = paths.map(f => f.pts);
+  let stuck = [];
+  for (let round = 0; round < 10; round++) {
+    paths.forEach((f, i) => { f.pts = straight[i]; });
+    stuck = paths.filter(f => !deflect(f, sheets));
+    if (!stuck.length) break;
+    // a fiber could not get round: shrink the sheets it still meets, then bend again
+    for (const pl of sheets) if (stuck.some(f => f.pts.some(X => nearSheet(pl, X, f.r + SKIN + GAP)))) {
+      pl.rw *= 0.8; pl.rh *= 0.8; pl.samples = sheetSamples(pl);
+    }
+  }
+  // last resort if shrinking was not enough: leave out a sheet a fiber still meets
+  if (stuck.length) sheets = sheets.filter(pl => !stuck.some(f => f.pts.some(X => nearSheet(pl, X, f.r + SKIN + GAP))));
+  model.add(fiberMeshes(paths));
   const go = new THREE.Group(); go.name = 'graphene_oxide';
-  placeSheets(fib.paths, P.sheets).forEach((pl, i) => go.add(buildSheet(pl, i + 1, mulberry32(P.seed * 31 + i))));
+  sheets.forEach((pl, i) => go.add(buildSheet(pl, i + 1, mulberry32(P.seed * 31 + i))));
   model.add(go);
   model.rotation.y = 0.32;
   const cam = stage._camera, ctl = stage._controls;
