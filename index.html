@@ -82,6 +82,7 @@
   .pages a.on { background: #1f3b55; color: #fff; }
   .pages a i { font-style: normal; font-size: 11px; opacity: .7; font-variant-numeric: tabular-nums; }
   .panel, .pages, .presets button, .btns button, .seg button { touch-action: manipulation; }
+  @media (max-width: 900px) { .legend { top: 64px; } }   /* clear of the page tabs */
   @media (max-width: 640px) {
     .pages { top: 10px; }
     .legend { top: 62px; left: 16px; max-width: calc(100vw - 32px); gap: 8px; }
@@ -92,7 +93,7 @@
 </style>
 </head>
 <body>
-<nav class="pages"><a href="index.html" class="on">复合水凝胶</a><a href="graphene.html">石墨烯单层</a></nav>
+<nav class="pages"><a href="index.html" class="on">复合水凝胶</a><a href="bighex.html">大环示意</a><a href="graphene.html">石墨烯单层</a></nav>
 <three-d-stage name="cellulose_GO_hydrogel" background="radial-gradient(120% 90% at 45% 38%, #ffffff 0%, #f1f6f9 45%, #dfe9f0 100%)"></three-d-stage>
 
 <div class="legend">

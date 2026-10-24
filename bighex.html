@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cellulose@GO 大环示意</title>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.184.0/build/three.module.js",
+    "three/addons/controls/OrbitControls.js": "https://unpkg.com/three@0.184.0/examples/jsm/controls/OrbitControls.js",
+    "three/addons/exporters/OBJExporter.js": "https://unpkg.com/three@0.184.0/examples/jsm/exporters/OBJExporter.js",
+    "three/addons/exporters/GLTFExporter.js": "https://unpkg.com/three@0.184.0/examples/jsm/exporters/GLTFExporter.js"
+  },
+  "integrity": {
+    "https://unpkg.com/three@0.184.0/build/three.module.js": "sha384-8FCZ1eVO6it4+pbec2aDtnTrwjWXZLJRC+MAGCIPDgsYnUrl/E0A2YlF8ioMKI/J",
+    "https://unpkg.com/three@0.184.0/build/three.core.js": "sha384-dw2ooPewaEIrAgl6oFDBmmBWCE9oW9LxRGcfwZ0hLvEprzo202wXl7vCYHRlSnOT",
+    "https://unpkg.com/three@0.184.0/examples/jsm/controls/OrbitControls.js": "sha384-4rziNxOBZKQ69i+w+f89KJ55TCYquwchVbByQwmaOeIOXdOU2PLDn3kOfXHwIJC9",
+    "https://unpkg.com/three@0.184.0/examples/jsm/exporters/OBJExporter.js": "sha384-nbwtoZENJD3Vq+ACK0CuGQdPMuDWHkamC2KJD70EV5nfg6jQjfppKOea07YJN+N3",
+    "https://unpkg.com/three@0.184.0/examples/jsm/exporters/GLTFExporter.js": "sha384-VofkvpG6HERhFCYbsUOHeNXBCqID2nfqkQqnVzE1jc/oPcz+qJ13ADdXH08hE+cQ"
+  }
+}
+</script>
+<style>
+  html, body { margin: 0; height: 100%; background: #eef3f7; font-family: "PingFang SC", "Noto Sans SC", "Microsoft YaHei", -apple-system, sans-serif; color: #1b2733; -webkit-font-smoothing: antialiased; }
+  a { color: #3b6f9c; } a:hover { color: #224d73; }
+  three-d-stage:not(:defined) { visibility: hidden; }
+  .legend { position: absolute; top: 28px; left: 32px; display: flex; flex-direction: column; gap: 14px; max-width: 300px; }
+  .legend .eyebrow { font-size: 11px; letter-spacing: 2px; color: #7c8c99; text-transform: uppercase; }
+  .legend h1 { margin: 0; white-space: nowrap; font-size: 22px; font-weight: 600; letter-spacing: .3px; color: #15212c; }
+  .legend p { margin: 0; font-size: 12.5px; line-height: 1.6; color: #5b6b78; text-wrap: pretty; }
+  .keys { display: grid; grid-template-columns: 26px 1fr; gap: 8px 10px; align-items: center; font-size: 12.5px; color: #33424f; padding-top: 12px; border-top: 1px solid rgba(27,39,51,.1); }
+  .sw { width: 9px; height: 9px; border-radius: 50%; justify-self: center; }
+  .sw.rod { width: 24px; height: 8px; border-radius: 4px; }
+  [contenteditable]:focus { outline: 1px dashed #9db6ca; outline-offset: 3px; }
+  .panel { position: absolute; top: 20px; right: 20px; width: 256px; max-height: calc(100vh - 80px); overflow: auto; background: #fff; border: 1px solid #dfe5ea; border-radius: 6px; font-size: 12.5px; }
+  .phead { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; cursor: pointer; user-select: none; }
+  .phead b { font-weight: 600; font-size: 13px; }
+  .phead span { color: #7c8c99; font-size: 12px; }
+  .pbody { display: flex; flex-direction: column; gap: 14px; padding: 0 14px 14px; }
+  .panel.closed .pbody { display: none; }
+  .sec { display: flex; flex-direction: column; gap: 10px; padding-top: 12px; border-top: 1px solid rgba(27,39,51,.07); }
+  .sec h2 { margin: 0; font-size: 12px; font-weight: 600; color: #1b2733; }
+  .row { display: flex; flex-direction: column; gap: 4px; }
+  .row label { display: flex; justify-content: space-between; white-space: nowrap; color: #33424f; }
+  .row label span:last-child { color: #8796a2; font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; margin: 2px 0; accent-color: #5b88b0; height: 16px; }
+  .presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .presets button { display: flex; justify-content: center; align-items: center; padding: 7px 2px; border: 1px solid #dfe5ea; border-radius: 5px; background: #fff; font: inherit; font-size: 11px; color: #4a5a67; cursor: pointer; }
+  .presets button.on { border-color: #1f3b55; }
+  .presets i { display: flex; } .presets i b { width: 14px; height: 14px; border-radius: 50%; border: 2px solid #fff; margin: 0 -2px; }
+  .colors { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .colors label { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 9px; background: #f3f6f8; color: #33424f; cursor: pointer; }
+  .colors label:hover { background: #eaeff3; }
+  input[type=color] { -webkit-appearance: none; appearance: none; flex: none; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer; overflow: hidden; box-shadow: 0 0 0 1px rgba(27,39,51,.12), inset 0 0 0 1px rgba(255,255,255,.2); }
+  input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+  input[type=color]::-webkit-color-swatch { border: 0; border-radius: 50%; }
+  input[type=color]::-moz-color-swatch { border: 0; border-radius: 50%; }
+  .seg { display: grid; grid-template-columns: repeat(3, 1fr); background: #eef2f5; border-radius: 8px; padding: 2px; }
+  .seg button { border: 0; background: none; font: inherit; font-size: 12px; padding: 5px 0; border-radius: 6px; color: #5b6b78; cursor: pointer; }
+  .seg button.on { background: #fff; color: #1b2733; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  .sw-row { display: flex; justify-content: space-between; align-items: center; cursor: pointer; color: #33424f; }
+  .sw-row input { appearance: none; width: 30px; height: 18px; border-radius: 9px; background: #d5dde4; position: relative; cursor: pointer; transition: background .15s; margin: 0; }
+  .sw-row input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); transition: left .15s; }
+  .sw-row input:checked { background: #5b88b0; } .sw-row input:checked::after { left: 14px; }
+  .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .btns button { padding: 8px 6px; border-radius: 8px; border: 1px solid rgba(27,39,51,.12); background: #fff; font: inherit; font-size: 12px; cursor: pointer; color: #1b2733; }
+  .btns button:hover { background: #f5f8fa; }
+  .btns button.primary { background: #1f3b55; color: #fff; border-color: #1f3b55; grid-column: span 2; }
+  .btns button.primary:hover { background: #2a4b6a; }
+  .help { font-size: 11.5px; color: #7c8c99; text-align: center; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+  .busy { position: absolute; left: 50%; top: 20px; transform: translateX(-50%); font-size: 12px; color: #5b6b78; background: rgba(255,255,255,.92); padding: 5px 12px; border-radius: 20px; display: none; }
+  .modal { position: fixed; inset: 0; background: rgba(20,32,44,.28); display: none; align-items: center; justify-content: center; z-index: 10; }
+  .modal.open { display: flex; }
+  .modal .card { width: min(460px, calc(100vw - 40px)); background: #fff; border-radius: 14px; padding: 22px 24px; font-size: 13px; line-height: 1.7; color: #33424f; box-shadow: 0 20px 60px rgba(0,0,0,.15); }
+  .modal h3 { margin: 0 0 10px; font-size: 15px; color: #15212c; }
+  .modal ol { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+  .modal button { margin-top: 14px; padding: 7px 16px; border-radius: 8px; border: 1px solid rgba(27,39,51,.12); background: #fff; font: inherit; cursor: pointer; }
+  .pages { position: fixed; top: 18px; left: 50%; transform: translateX(-50%); z-index: 5; display: flex; gap: 2px; padding: 3px; background: #fff; border: 1px solid #dfe5ea; border-radius: 6px; font-family: "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif; }
+  .pages a { display: flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 4px; font-size: 12.5px; color: #5b6b78; text-decoration: none; white-space: nowrap; }
+  .pages a:hover { color: #1b2733; background: rgba(27,39,51,.04); }
+  .pages a.on { background: #1f3b55; color: #fff; }
+  .pages a i { font-style: normal; font-size: 11px; opacity: .7; font-variant-numeric: tabular-nums; }
+  .panel, .pages, .presets button, .btns button, .seg button { touch-action: manipulation; }
+  @media (max-width: 900px) { .legend { top: 64px; } }   /* clear of the page tabs */
+  @media (max-width: 640px) {
+    .pages { top: 10px; }
+    .legend { top: 62px; left: 16px; max-width: calc(100vw - 32px); gap: 8px; }
+    .legend h1 { font-size: 17px; white-space: normal; }
+    .keys { display: none; }
+    .panel { top: auto; bottom: max(16px, env(safe-area-inset-bottom)); left: 16px; right: 16px; width: auto; max-height: 55vh; max-height: 55dvh; }
+  }
+</style>
+</head>
+<body>
+<nav class="pages"><a href="index.html">复合水凝胶</a><a href="bighex.html" class="on">大环示意</a><a href="graphene.html">石墨烯单层</a></nav>
+<three-d-stage name="cellulose_GO_hydrogel_large_rings" background="linear-gradient(180deg, #fbfdfe 0%, #eaf3f8 55%, #d6e7f1 100%)"></three-d-stage>
+
+<div class="legend">
+  <h1 contenteditable="true">少爷专属石墨烯水凝胶模型</h1>
+  <p>大环示意：六元环按约 2.5 倍放大显示，片层与纤维尺寸未按比例。</p>
+  <div class="keys">
+    <span class="sw rod" id="kA"></span><span contenteditable="true">水凝胶纤维 A</span>
+    <span class="sw rod" id="kB"></span><span contenteditable="true">水凝胶纤维 B</span>
+    <span class="sw" id="kC"></span><span contenteditable="true">氧化石墨烯 (GO) 碳骨架</span>
+    <span class="sw" id="kO"></span><span contenteditable="true">含氧官能团 –OH / C–O–C / –COOH</span>
+  </div>
+</div>
+
+<div class="panel closed" id="panel">
+  <div class="phead" id="phead"><b>模型参数</b><span id="ptoggle">展开</span></div>
+  <div class="pbody">
+    <div class="sec" style="border-top:0;padding-top:0">
+      <h2>配色</h2>
+      <div class="presets" id="presets"></div>
+      <div class="colors">
+        <label><input type="color" id="colorA"> 纤维 A</label>
+        <label><input type="color" id="colorB"> 纤维 B</label>
+        <label><input type="color" id="colorC"> GO 片层</label>
+        <label><input type="color" id="colorO"> 官能团 O</label>
+      </div>
+      <div class="row"><label>颜色分布</label>
+        <div class="seg" id="dist"><button data-v="alternate">交替</button><button data-v="axis">按方向</button><button data-v="random">随机</button></div>
+      </div>
+    </div>
+    <div class="sec">
+      <h2>水凝胶纤维</h2>
+      <div class="row"><label><span>每方向数量</span><span id="perAxisV"></span></label><input type="range" id="perAxis" min="2" max="6" step="1"></div>
+      <div class="row"><label><span>粗细</span><span id="radiusV"></span></label><input type="range" id="radius" min="0.02" max="0.06" step="0.002"></div>
+      <div class="row"><label><span>弯曲程度</span><span id="curveV"></span></label><input type="range" id="curve" min="0" max="2" step="0.1"></div>
+    </div>
+    <div class="sec">
+      <h2>氧化石墨烯</h2>
+      <div class="row"><label><span>片层数</span><span id="sheetsV"></span></label><input type="range" id="sheets" min="0" max="6" step="1"></div>
+      <div class="row"><label><span>褶皱程度</span><span id="wrinkleV"></span></label><input type="range" id="wrinkle" min="0" max="2" step="0.1"></div>
+      <div class="row"><label><span>官能团密度</span><span id="densityV"></span></label><input type="range" id="density" min="0" max="2" step="0.1"></div>
+      <label class="sw-row">显示碳原子球（球棍模型）<input type="checkbox" id="atoms"></label>
+    </div>
+    <div class="sec">
+      <h2>视图与导出</h2>
+      <label class="sw-row">自动旋转<input type="checkbox" id="spin"></label>
+      <div class="btns">
+        <button id="reseed">随机布局</button>
+        <button id="png">透明 PNG</button>
+        <button id="glb" class="primary">下载 3D 模型 (GLB)</button>
+        <button id="obj" style="grid-column:span 2">下载 OBJ + MTL</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="busy" id="busy"></div>
+
+<script src="three-d-stage.js"></script>
+<script type="module">
+const stage = document.querySelector('three-d-stage');
+const { THREE } = await stage.ready;
+const V3 = THREE.Vector3;
+
+// ---------- premium look: tone mapping + soft studio environment ----------
+const renderer = stage._renderer, scene = stage._scene;
+renderer.toneMapping = THREE.NeutralToneMapping;
+renderer.toneMappingExposure = 1.0;
+{
+  const env = new THREE.Scene();
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), new THREE.MeshBasicMaterial({ color: new THREE.Color('#cfdbe4'), side: THREE.BackSide }));
+  env.add(dome);
+  const panel = (w, h, pos, col, k) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: new THREE.Color(col).multiplyScalar(k), side: THREE.DoubleSide }));
+    m.position.set(...pos); m.lookAt(0, 0, 0); env.add(m); };
+  panel(8, 5, [0, 8, 2], '#ffffff', 3.2);     // top softbox
+  panel(4, 6, [7, 2, 4], '#fff6ec', 2.0);     // warm key strip
+  panel(3, 6, [-7, 1, -3], '#dbeaff', 1.6);   // cool rim
+  panel(10, 3, [0, -6, 0], '#e9eef2', 0.6);   // floor bounce
+  const pm = new THREE.PMREMGenerator(renderer);
+  scene.environment = pm.fromScene(env, 0.03).texture;
+  scene.traverse(o => { if (o.isHemisphereLight) o.intensity = 0.25; if (o.isDirectionalLight) o.intensity *= 1.0; });
+  scene.environmentIntensity = 0.6;
+  stage._ground.material.opacity = 0.0;
+}
+stage.shadowRoot.querySelector('.toolbar').style.display = 'none';
+stage.shadowRoot.querySelector('.note').style.display = 'none';
+
+const PRESETS = [
+  { a: '#72c9a3', b: '#72b2e4' },
+  { a: '#9ed9d2', b: '#a6b8ee' },
+  { a: '#b6dc9e', b: '#86cde0' },
+];
+const SAVE_KEY = 'cellGO3d.largeRings.v1';
+const DEF = { seed: 11, colorA: '#8fb1cc', colorB: '#8fb1cc', colorC: '#3b4249', colorO: '#f08072', dist: 'alternate', perAxis: 4, radius: 0.045, curve: 1, sheets: 3, wrinkle: 1, density: 0, atoms: false, spin: false };
+let saved = {}; try { saved = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}'); } catch (e) {}
+const P = Object.assign({}, DEF, saved);
+const save = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(P)); } catch (e) {} };
+
+const gel = (name, c) => new THREE.MeshPhysicalMaterial({ name, color: c, roughness: 0.32, metalness: 0, clearcoat: 0.8, clearcoatRoughness: 0.15, envMapIntensity: 0.6 });
+const mats = {
+  A: gel('hydrogel_fiber_A', P.colorA),
+  B: gel('hydrogel_fiber_B', P.colorB),
+  C: new THREE.MeshStandardMaterial({ name: 'GO_carbon', color: P.colorC, roughness: 0.16, metalness: 0.12, envMapIntensity: 1.1 }),
+  film: new THREE.MeshStandardMaterial({ name: 'GO_film', color: P.colorC, roughness: 0.5, metalness: 0, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide }),
+  Cb: new THREE.MeshStandardMaterial({ name: 'GO_bond', color: P.colorC, roughness: 0.26, metalness: 0.1, envMapIntensity: 1.0 }),
+  O: new THREE.MeshStandardMaterial({ name: 'oxygen', color: P.colorO, roughness: 0.16, metalness: 0.08, envMapIntensity: 1.0 }),
+  H: new THREE.MeshStandardMaterial({ name: 'hydrogen', color: '#f3f5f7', roughness: 0.16, metalness: 0.05, envMapIntensity: 1.0 }),
+};
+
+function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function shuffle(a, r) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+function bake(base, matrices) {
+  const bp = base.attributes.position.array, bn = base.attributes.normal.array, bi = base.index.array;
+  const nv = bp.length / 3, ni = bi.length, k = matrices.length;
+  const pos = new Float32Array(nv * k * 3), nor = new Float32Array(nv * k * 3), idx = new Uint32Array(ni * k);
+  const v = new V3(), nm = new THREE.Matrix3();
+  for (let j = 0; j < k; j++) {
+    const m = matrices[j]; nm.getNormalMatrix(m); const o = j * nv;
+    for (let i = 0; i < nv; i++) {
+      v.fromArray(bp, i * 3).applyMatrix4(m).toArray(pos, (o + i) * 3);
+      v.fromArray(bn, i * 3).applyMatrix3(nm).normalize().toArray(nor, (o + i) * 3);
+    }
+    for (let i = 0; i < ni; i++) idx[j * ni + i] = bi[i] + o;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  g.setIndex(new THREE.BufferAttribute(idx, 1));
+  return g;
+}
+function merge(geoms) {
+  let nv = 0, ni = 0; for (const g of geoms) { nv += g.attributes.position.count; ni += g.index.count; }
+  const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), idx = new Uint32Array(ni);
+  let ov = 0, oi = 0;
+  for (const g of geoms) {
+    pos.set(g.attributes.position.array, ov * 3); nor.set(g.attributes.normal.array, ov * 3);
+    const gi = g.index.array; for (let i = 0; i < gi.length; i++) idx[oi + i] = gi[i] + ov;
+    ov += g.attributes.position.count; oi += gi.length; g.dispose();
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  out.setIndex(new THREE.BufferAttribute(idx, 1));
+  return out;
+}
+const Y = new V3(0, 1, 0), Z = new V3(0, 0, 1);
+const UNIT_CYL = new THREE.CylinderGeometry(1, 1, 1, 10, 1, true);
+const UNIT_BALL = new THREE.SphereGeometry(1, 16, 11);
+const stickM = (p, q, r) => { const d = new V3().subVectors(q, p); const L = d.length();
+  return new THREE.Matrix4().compose(p.clone().add(q).multiplyScalar(0.5), new THREE.Quaternion().setFromUnitVectors(Y, d.divideScalar(L)), new V3(r, L, r)); };
+const ballM = (p, r) => new THREE.Matrix4().compose(p, new THREE.Quaternion(), new V3(r, r, r));
+
+// ---------- hydrogel fibers ----------
+// Without sheets the fibers form a free network running along the three axes.
+function freeFibers(rng) {
+  const paths = [];
+  let k = 0;
+  for (let ax = 0; ax < 3; ax++) {
+    const b = (ax + 1) % 3, c = (ax + 2) % 3;
+    const LV = [0.17, 0.27, 0.36], lb = LV[ax], lc = LV[(ax + 2) % 3];
+    const cells = [...shuffle([[1, 1], [-1, 1], [1, -1], [-1, -1]], rng), [0, 0], ...shuffle([[0, 1], [1, 0], [0, -1], [-1, 0]], rng)];
+    for (let f = 0; f < P.perAxis; f++) {
+      const [i, j] = cells[f % cells.length];
+      const ob = i * lb + (rng() - 0.5) * 0.05, oc = j * lc + (rng() - 0.5) * 0.05;
+      const l0 = 0.42 + rng() * 0.18, l1 = 0.42 + rng() * 0.18;
+      const tb = (rng() - 0.5) * 0.5, tc = (rng() - 0.5) * 0.5;
+      const bb = (rng() - 0.5) * 0.3 * P.curve, bc = (rng() - 0.5) * 0.3 * P.curve;
+      const pts = [[-l0, 0, 0], [-l0 * 0.5, 0.75, 0.8], [0, 1, 0], [l1 * 0.5, 0.75, -0.8], [l1, 0, 0]].map(([s, wa, ws]) => {
+        const v = [0, 0, 0]; v[ax] = s; v[b] = ob + tb * s * 2 + bb * wa; v[c] = oc + tc * s * 2 + bc * ws;
+        return new V3(...v);
+      });
+      const r = P.radius * (0.9 + rng() * 0.2);
+      const useA = P.dist === 'alternate' ? k % 2 === 0 : P.dist === 'axis' ? ax !== 1 : rng() < 0.5;
+      paths.push({ pts: new THREE.CatmullRomCurve3(pts, false, 'centripetal').getSpacedPoints(160), r, useA, k });
+      k++;
+    }
+  }
+  return paths;
+}
+function fiberMeshes(paths) {
+  const grp = new THREE.Group(); grp.name = 'hydrogel_network';
+  for (const { pts, r, useA, k } of paths) {
+    const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
+    const tube = new THREE.TubeGeometry(curve, 160, r, 40, false); tube.deleteAttribute('uv');
+    // softly rounded end caps (flattened hemispheres) read better than hard discs
+    const caps = [[0, -1], [1, 1]].map(([t, sgn]) => {
+      const out = curve.getTangent(t).multiplyScalar(sgn);
+      const g = new THREE.SphereGeometry(r, 40, 10, 0, Math.PI * 2, 0, Math.PI / 2); g.deleteAttribute('uv');
+      g.applyMatrix4(new THREE.Matrix4().compose(curve.getPoint(t), new THREE.Quaternion().setFromUnitVectors(Y, out), new V3(1, 0.35, 1)));
+      return g;
+    });
+    const mesh = new THREE.Mesh(merge([tube, ...caps]), useA ? mats.A : mats.B);
+    mesh.name = `fiber_${String(k + 1).padStart(2, '0')}_${useA ? 'A' : 'B'}`;
+    grp.add(mesh);
+  }
+  return grp;
+}
+
+// ---------- graphene oxide sheets ----------
+const SHEETS = [
+  { c: [0.02, 0.27, -0.03], u: [1, 0.22, 0.15], v: [-0.1, 0.25, 1], rw: 0.42, rh: 0.34, k1: -0.7, k2: 0.25, A: 0.024 },
+  { c: [-0.27, 0.0, 0.05], u: [0.3, 0.15, 1], v: [0.25, 1, -0.1], rw: 0.34, rh: 0.37, k1: 0.6, k2: -0.2, A: 0.028 },
+  { c: [0.28, -0.04, -0.02], u: [-0.25, 0.1, 1], v: [-0.3, 1, 0.15], rw: 0.33, rh: 0.35, k1: -0.55, k2: 0.3, A: 0.026 },
+  { c: [-0.02, -0.26, 0.06], u: [1, -0.25, 0.1], v: [0.1, 0.2, 1], rw: 0.37, rh: 0.33, k1: 0.65, k2: -0.2, A: 0.022 },
+  { c: [0.03, 0.03, -0.27], u: [1, 0.15, 0.3], v: [-0.1, 1, 0.25], rw: 0.35, rh: 0.33, k1: 0.45, k2: 0.35, A: 0.026 },
+  { c: [0.02, 0.02, 0.07], u: [0.72, 0.2, 0.66], v: [-0.35, 0.86, 0.36], rw: 0.29, rh: 0.27, k1: -0.8, k2: 0.15, A: 0.022 },
+];
+// large-ring view: the lattice is drawn 2.5x coarser than the atomic page, so the
+// rings read at a glance; every sheet length scales with it
+const BOND = 0.05, K = BOND / 0.02;
+const R = { cAtom: 0.0045 * K, cc: 0.002 * K, gStick: 0.0019 * K, O: 0.0062 * K, H: 0.004 * K };
+
+// ---------- layout: large GO sheets, fibers adsorbed on them or bridging between them ----------
+// The sheets are laid down first as large separate flakes. Each fiber then either lies on
+// a sheet face, resting on its oxygen groups and following its wrinkles, or bridges from
+// one sheet to the next. GO is impermeable, so no fiber passes through a sheet; fibers
+// that cross on the same face climb over each other instead of passing through.
+let SKIN = 0.035 * K, GAP = 0.004;        // set per build: groups shown or not (see build())
+// room for one fiber on each of two facing faces (follows the thickness slider)
+const sheetGap = () => 2 * (2.2 * P.radius + SKIN + GAP) + 0.02;
+const AXES = [new V3(1, 0, 0), new V3(0, 1, 0), new V3(0, 0, 1)];
+function frame(u, v) {
+  const U = new V3(...u).normalize(), Vf = new V3(...v);
+  Vf.sub(U.clone().multiplyScalar(Vf.dot(U))).normalize();
+  return { U, V: Vf, N: new V3().crossVectors(U, Vf) };
+}
+function makeSheet(F, C, rw, rh, def, rng) {
+  return { ...F, C, rw, rh, k1: def.k1, k2: def.k2, A: def.A,
+    f1: rng() * 6.28, f2: rng() * 6.28, p1: rng() * 6.28, p2: rng() * 6.28, p3: rng() * 6.28 };
+}
+// height of the real (curved, wrinkled) sheet surface above its frame at in-plane (s, t)
+const height = (pl, s, t, w = P.wrinkle) => pl.k1 * s * s + pl.k2 * t * t
+  + w * (pl.A * Math.sin(s * 11 + pl.f1) * Math.cos(t * 8 + pl.f2) + 0.008 * Math.sin(s * 31 + t * 23 + pl.f2));
+const wmax = pl => 2 * (pl.A + 0.008);    // largest wrinkle the slider allows
+// outline: rim(direction) in footprint units; shape() < rim() is on the sheet
+const rim = (pl, s, t) => { const th = Math.atan2(t / pl.rh, s / pl.rw);
+  return 1 + 0.07 * Math.sin(3 * th + pl.p1) + 0.05 * Math.sin(5 * th + pl.p2) + 0.035 * Math.sin(8 * th + pl.p3); };
+const shape = (pl, s, t, m = 0) => Math.pow(Math.pow(Math.abs(s) / (pl.rw + m), 2.6) + Math.pow(Math.abs(t) / (pl.rh + m), 2.6), 1 / 2.6);
+const _d = new V3();
+function local(pl, X, w) {
+  _d.subVectors(X, pl.C);
+  const s = _d.dot(pl.U), t = _d.dot(pl.V);
+  return { s, t, h: _d.dot(pl.N) - height(pl, s, t, w) };
+}
+// how far the surface under the flank of a fiber of radius r, lying on side `side`, rises
+// above the surface under its axis (wrinkles slope)
+const DIRS8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [0.7, 0.7], [-0.7, 0.7], [0.7, -0.7], [-0.7, -0.7]];
+function flank(pl, s, t, r, side, w) {
+  const h0 = height(pl, s, t, w);
+  let e = 0;
+  for (const [a, b] of DIRS8) e = Math.max(e, side * (height(pl, s + a * r, t + b * r, w) - h0));
+  return e;
+}
+// is world point X within m of sheet pl (outline grown by m)?
+function nearSheet(pl, X, m, w) {
+  _d.subVectors(X, pl.C);
+  const lim = Math.max(pl.rw, pl.rh) * 1.25 + m + 0.35;
+  if (_d.lengthSq() > lim * lim) return false;
+  const { s, t, h } = local(pl, X, w);
+  if (Math.abs(h) >= m + 0.08 || shape(pl, s, t, m) >= rim(pl, s, t) + 0.05) return false;
+  if (Math.abs(h) < m) return true;
+  // on a sloped wrinkle the surface under the fiber's flank sits higher than under its axis
+  return Math.abs(h) < m + flank(pl, s, t, m - SKIN - GAP, h >= 0 ? 1 : -1, w);
+}
+const onSheet = (pl, s, t, lift) => pl.C.clone().addScaledVector(pl.U, s).addScaledVector(pl.V, t).addScaledVector(pl.N, height(pl, s, t) + lift);
+function sheetSamples(pl) {
+  const out = [];
+  for (let i = -6; i <= 6; i++) for (let j = -6; j <= 6; j++) {
+    const x = i / 6 * 1.16, y = j / 6 * 1.16;
+    if (Math.pow(Math.pow(Math.abs(x), 2.6) + Math.pow(Math.abs(y), 2.6), 1 / 2.6) > 1.16) continue;
+    const s = x * pl.rw, t = y * pl.rh;
+    out.push(pl.C.clone().addScaledVector(pl.U, s).addScaledVector(pl.V, t).addScaledVector(pl.N, height(pl, s, t, 0)));
+  }
+  return out;
+}
+function clearOfSheets(pl, placed) {
+  if (!placed.length) return true;
+  const mine = sheetSamples(pl);
+  for (const q of placed) {
+    const m = sheetGap() + wmax(pl) + wmax(q);
+    for (const X of mine) if (nearSheet(q, X, m, 0)) return false;
+    for (const X of q.samples) if (nearSheet(pl, X, m, 0)) return false;
+  }
+  return true;
+}
+// Sheets first: a loose layered stack (two side by side from four sheets up), each sheet
+// roughly level, turned and tilted a little. Spacing leaves room for a fiber between
+// neighbours; the stack opens up until no two sheets come within that gap, so every
+// requested sheet is always placed. The fiber-count, curve and wrinkle sliders do not move them.
+function placeSheets(count) {
+  if (!count) return [];
+  const rng = mulberry32(P.seed * 97 + 13);
+  const cols = count >= 4 ? 2 : 1, rows = Math.ceil(count / cols);
+  const sc = [1, 1.3, 1.22, 1.12, 0.86, 0.8, 0.74][count] * 1.6;   // sheets about as wide as the network
+  const base = SHEETS.slice(0, count).map((def, i) => {
+    const yaw = rng() * 6.28, tx = (rng() - 0.5) * 0.24, tz = (rng() - 0.5) * 0.24;
+    const F = frame([1, 0, 0], [0, 0, 1]);
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(tx, yaw, tz, 'YXZ'));
+    F.U.applyQuaternion(q); F.V.applyQuaternion(q); F.N.applyQuaternion(q);
+    return { F, def, jitter: [(rng() - 0.5) * 0.12, (rng() - 0.5) * 0.12], phase: mulberry32(P.seed * 31 + i * 7) };
+  });
+  const reachOf = b => Math.max(b.def.rw, b.def.rh) * sc * 1.16;   // farthest edge from the centre
+  const clear = sheetGap() + 2 * Math.max(...base.map(b => wmax(b.def)));   // what clearOfSheets() asks for
+  const halfX = cols === 2 ? Math.max(...base.map(reachOf)) + clear / 2 + 0.02 : 0;
+  for (let grow = 1; ; grow *= 1.05) {
+    const dy = (clear + 0.03) * grow;
+    const placed = [];
+    base.forEach((b, i) => {
+      const col = cols === 2 ? i % 2 : 0, row = cols === 2 ? i >> 1 : i;
+      const y = (row - (rows - 1) / 2) * dy + (cols === 2 ? (col - 0.5) * dy * 0.4 : 0);
+      const C = new V3((col - (cols - 1) / 2) * 2 * halfX + b.jitter[0], y, b.jitter[1]);
+      const pl = makeSheet({ U: b.F.U.clone(), V: b.F.V.clone(), N: b.F.N.clone() }, C, b.def.rw * sc, b.def.rh * sc, b.def, mulberry32(P.seed * 31 + i * 7));
+      pl.k1 *= 0.35; pl.k2 *= 0.35;   // large flakes: gently bowed, still wrinkled
+      pl.samples = sheetSamples(pl);
+      placed.push(pl);
+    });
+    if (placed.every((pl, i) => clearOfSheets(pl, placed.slice(0, i))) || grow > 6) return placed;
+  }
+}
+
+// centre height for a fiber of radius r lying on side `side` of pl at (s, t): it rests on
+// the oxygen groups, lifted over the highest bit of surface under its own width
+function restLift(pl, s, t, r, side) {
+  return side * (r + SKIN + GAP + 0.003 + flank(pl, s, t, r, side));
+}
+// in-plane stretch on pl through `base` along unit (ds, dt), from rim to rim, gently waved
+function stretch(pl, base, ds, dt, r, side, rng, limit = 0.97) {
+  const ns = -dt, nt = ds, amp = P.curve * 0.025, ph = rng() * 6.28;
+  const inAt = u => { const s = base[0] + u * ds, t = base[1] + u * dt; return shape(pl, s, t) < rim(pl, s, t) * limit; };
+  let u0 = 0, u1 = 0;
+  while (u0 > -1.5 && inAt(u0 - 0.005)) u0 -= 0.005;
+  while (u1 < 1.5 && inAt(u1 + 0.005)) u1 += 0.005;
+  const out = [];
+  for (let u = u0; u <= u1 + 1e-9; u += 0.02) {
+    const wv = amp * Math.sin(u * 9 + ph) * Math.min(1, (u - u0) / 0.08, (u1 - u) / 0.08);
+    const s = base[0] + u * ds + wv * ns, t = base[1] + u * dt + wv * nt;
+    if (shape(pl, s, t) >= rim(pl, s, t) * 0.99) continue;
+    out.push(onSheet(pl, s, t, restLift(pl, s, t, r, side)));
+  }
+  return out;
+}
+// a free end leaving a sheet edge: carries on, curling away from the face it lay on
+function tail(E, T, pl, side, rng) {
+  const len = 0.12 + rng() * 0.18, up = side * (0.08 + P.curve * (0.08 + 0.25 * rng()));
+  const lat = new V3().crossVectors(pl.N, T).normalize().multiplyScalar((rng() - 0.5) * P.curve * 0.6);
+  const out = [];
+  for (let j = 1; j <= 5; j++) {
+    const u = j / 5 * len;
+    out.push(E.clone().addScaledVector(T, u).addScaledVector(pl.N, up * u * u * 2).addScaledVector(lat, u * u * 2).clampScalar(-0.75, 0.75));
+  }
+  return out;
+}
+function adsorbed(pl, ang, r, rng) {
+  const side = rng() < 0.5 ? 1 : -1;
+  const ds = Math.cos(ang), dt = Math.sin(ang), o = (rng() - 0.5) * 1.3;
+  const base = [-dt * o * pl.rw * 0.5, ds * o * pl.rh * 0.5];
+  const mid = stretch(pl, base, ds, dt, r, side, rng);
+  if (mid.length < 4) return null;
+  const T1 = mid[mid.length - 1].clone().sub(mid[mid.length - 3]).normalize(), T0 = mid[0].clone().sub(mid[2]).normalize();
+  return [...tail(mid[0], T0, pl, side, rng).reverse(), ...mid, ...tail(mid[mid.length - 1], T1, pl, side, rng)];
+}
+// from a short stretch on sheet a, across the gap, onto a short stretch on sheet b; the
+// j-th bridge between two sheets is set at its own angle so bridges stay apart
+function bridge(a, b, r, rng, j) {
+  const sa = Math.sign(a.N.dot(_d.subVectors(b.C, a.C))) || 1, sb = Math.sign(b.N.dot(_d.subVectors(a.C, b.C))) || 1;
+  const th = j * 2.39996 + rng() * 0.4, rho = 0.3 + 0.3 * rng();
+  const anchor = pl => { const L = local(pl, a.C.clone().add(b.C).multiplyScalar(0.5), 0);   // stack axis through this sheet
+    let s = L.s + rho * Math.cos(th) * pl.rw, t = L.t + rho * Math.sin(th) * pl.rh;
+    const k = shape(pl, s, t) / (0.7 * rim(pl, s, t)); if (k > 1) { s /= k; t /= k; }
+    return [s, t]; };
+  const piece = (pl, side, at) => {   // ~0.24 long, lying radially and ending at `at`
+    const ds = -Math.cos(th), dt = -Math.sin(th);
+    const out = [];
+    for (let u = -0.24; u <= 1e-9; u += 0.02) { const s = at[0] + u * ds, t = at[1] + u * dt;
+      if (shape(pl, s, t) < rim(pl, s, t) * 0.97) out.push(onSheet(pl, s, t, restLift(pl, s, t, r, side))); }
+    return out;
+  };
+  const ta = anchor(a), tb = anchor(b);
+  const pa = piece(a, sa, ta), pb = piece(b, sb, tb).reverse();
+  if (pa.length < 3 || pb.length < 3) return null;
+  const ea = pa[pa.length - 1], eb = pb[0], gap = ea.distanceTo(eb);
+  const ca = ea.clone().addScaledVector(a.N, sa * gap * 0.35), cb = eb.clone().addScaledVector(b.N, sb * gap * 0.35);
+  const sway = new V3(rng() - 0.5, rng() - 0.5, rng() - 0.5).multiplyScalar(P.curve * 0.12);
+  ca.add(sway); cb.add(sway);
+  return [...pa, ca, cb, ...pb];
+}
+function buildFibers(rng, sheets) {
+  if (!sheets.length) return freeFibers(rng);
+  const paths = [], amin = Math.min(...sheets.map(s => s.rw * s.rh)), nBridge = new Map();
+  // every sheet gets a fiber first, then larger sheets get more
+  const order = [...shuffle(sheets.map((_, i) => i), rng),
+    ...shuffle(sheets.flatMap((s, i) => Array(Math.min(2, Math.round(s.rw * s.rh / amin) - 1)).fill(i)), rng)];
+  let k = 0;
+  for (let ax = 0; ax < 3; ax++) for (let f = 0; f < P.perAxis; f++, k++) {
+    const r = P.radius * (0.9 + rng() * 0.2);
+    const useA = P.dist === 'alternate' ? k % 2 === 0 : P.dist === 'axis' ? ax !== 1 : rng() < 0.5;
+    const pl = sheets[order[k % order.length]];
+    // run along the fiber's axis as projected on the sheet; where the sheet faces that axis,
+    // bridge to a neighbouring sheet instead
+    const ps = AXES[ax].dot(pl.U), pt = AXES[ax].dot(pl.V), along = Math.hypot(ps, pt);
+    const others = sheets.filter(q => q !== pl).sort((p, q) => p.C.distanceTo(pl.C) - q.C.distanceTo(pl.C));
+    let pts = null;
+    if (along < 0.55 && others.length) {
+      const o = others[rng() < 0.7 || others.length < 2 ? 0 : 1], key = [sheets.indexOf(pl), sheets.indexOf(o)].sort().join();
+      nBridge.set(key, (nBridge.get(key) || 0) + 1);
+      pts = bridge(pl, o, r, rng, nBridge.get(key));
+    }
+    if (!pts) pts = adsorbed(pl, along < 0.55 ? rng() * Math.PI : Math.atan2(pt, ps) + (rng() - 0.5) * 0.6, r, rng);
+    if (!pts) continue;
+    paths.push({ pts: new THREE.CatmullRomCurve3(pts, false, 'centripetal').getSpacedPoints(160), r, useA, k });
+  }
+  return paths;
+}
+// fibers do not pass through each other: where two come too close, the later one climbs
+// over (off the sheet face it lies on) or, with no room above, steps aside. Each push is
+// spread over the neighbouring points as a smooth bump, like a fiber draped over another.
+function separate(paths, sheets) {
+  const cell = 0.1, key = (x, y, z) => Math.floor(x / cell) + ',' + Math.floor(y / cell) + ',' + Math.floor(z / cell);
+  const SPREAD = 9, bell = [...Array(2 * SPREAD + 1)].map((_, j) => Math.exp(-(((j - SPREAD) / (SPREAD * 0.55)) ** 2)));
+  for (let it = 0; it < 40; it++) {
+    const grid = new Map();
+    paths.forEach((f, fi) => f.pts.forEach((X, i) => { const k = key(X.x, X.y, X.z); (grid.get(k) || grid.set(k, []).get(k)).push(fi, i); }));
+    const pushes = new Map();   // fiber -> [point index, displacement]
+    paths.forEach((f, fi) => f.pts.forEach((X, i) => {
+      const cx = Math.floor(X.x / cell), cy = Math.floor(X.y / cell), cz = Math.floor(X.z / cell);
+      let worst = null;
+      for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) {
+        const L = grid.get((cx + a) + ',' + (cy + b) + ',' + (cz + c)); if (!L) continue;
+        for (let j = 0; j < L.length; j += 2) {
+          if (L[j] >= fi) continue;   // earlier fibers stay put
+          const g = paths[L[j]], Q = g.pts[L[j + 1]], need = f.r + g.r + 0.006, d = X.distanceTo(Q);
+          if (d < need && (!worst || need - d > worst.gap)) worst = { Q, gap: need - d + 0.003 };
+        }
+      }
+      if (!worst) return;
+      const away = X.clone().sub(worst.Q); if (away.lengthSq() < 1e-10) away.copy(AXES[1]); away.normalize();
+      const face = sheets.find(pl => { const l = local(pl, X); return Math.abs(l.h) < f.r + SKIN + 0.05 && shape(pl, l.s, l.t) < rim(pl, l.s, l.t); });
+      let dir = away;
+      if (face) {
+        const up = face.N.clone().multiplyScalar(Math.sign(local(face, X).h) || 1);
+        const top = X.clone().addScaledVector(up, worst.gap);
+        if (!sheets.some(q => q !== face && nearSheet(q, top, f.r + SKIN + GAP))) dir = up;
+        else { dir = away.addScaledVector(face.N, -away.dot(face.N)); if (dir.lengthSq() < 1e-8) dir.copy(face.U); dir.normalize(); }
+      }
+      (pushes.get(fi) || pushes.set(fi, []).get(fi)).push([i, dir.multiplyScalar(worst.gap)]);
+    }));
+    if (!pushes.size) break;
+    for (const [fi, list] of pushes) {
+      const pts = paths[fi].pts, best = pts.map(() => null);
+      for (const [i, D] of list) for (let j = -SPREAD; j <= SPREAD; j++) {
+        const k = i + j; if (k < 0 || k >= pts.length) continue;
+        const v = D.clone().multiplyScalar(bell[j + SPREAD]);
+        if (!best[k] || v.lengthSq() > best[k].lengthSq()) best[k] = v;
+      }
+      best.forEach((v, k) => v && pts[k].add(v));
+    }
+  }
+}
+
+// Bend one fiber until it is clear of every sheet. A stretch that crosses a sheet is
+// pushed sideways past the nearest edge; a stretch that only lies against a face is
+// pushed off that face. Returns false if it could not be cleared.
+function deflect(f, sheets) {
+  const m = f.r + SKIN + GAP;
+  let pts = f.pts.map(p => p.clone());
+  const last = pts.length - 1;
+  const othersHit = (pl, Xs) => sheets.reduce((n, q) => q === pl ? n : n + Xs.filter(X => nearSheet(q, X, m)).length, 0);
+  for (let it = 0; it < 80; it++) {
+    let moved = false;
+    for (const pl of sheets) {
+      const bad = [];
+      pts.forEach((X, i) => { if (nearSheet(pl, X, m)) bad.push(i); });
+      if (!bad.length) continue;
+      moved = true;
+      const runs = [];
+      for (const i of bad) { const r = runs[runs.length - 1]; if (r && i === r[1] + 1) r[1] = i; else runs.push([i, i]); }
+      const zone = m;   // distance to the real wrinkled surface, so no extra allowance
+      for (const [a, b] of runs) {
+        const hA = local(pl, pts[Math.max(a - 3, 0)]).h, hB = local(pl, pts[Math.min(b + 3, last)]).h;
+        const crosses = a > 0 && b < last && hA * hB < 0;
+        if (crosses) {
+          // sideways, perpendicular to the fiber's direction across the sheet, toward the nearer edge
+          const T = pts[Math.min(b + 1, last)].clone().sub(pts[Math.max(a - 1, 0)]);
+          let ps = -T.dot(pl.V), pt = T.dot(pl.U);
+          const len = Math.hypot(ps, pt) || 1; ps /= len; pt /= len;
+          let ms = 0, mt = 0;
+          for (let i = a; i <= b; i++) { const L = local(pl, pts[i]); ms += L.s / pl.rw; mt += L.t / pl.rh; }
+          if (ps * ms + pt * mt < 0) { ps = -ps; pt = -pt; }
+          const lo = Math.max(a - 2, 0), hi = Math.min(b + 2, last);
+          const push = sgn => { const out = []; let cost = 0;
+            for (let i = lo; i <= hi; i++) {
+              const L = local(pl, pts[i]);
+              let lam = 0;
+              while (lam < 2 && shape(pl, L.s + lam * sgn * ps, L.t + lam * sgn * pt, m) < 1.25) lam += 0.01;
+              cost += lam; out.push(pts[i].clone().addScaledVector(pl.U, lam * sgn * ps).addScaledVector(pl.V, lam * sgn * pt));
+            }
+            return { out, cost, hit: othersHit(pl, out) }; };
+          const near = push(1), far = push(-1);
+          const go = far.hit < near.hit || (far.hit === near.hit && far.cost < near.cost) ? far : near;
+          go.out.forEach((X, j) => pts[lo + j].copy(X));
+        } else {
+          let hs = 0;
+          for (let i = a; i <= b; i++) hs += local(pl, pts[i]).h;
+          const pref = (a === 0 ? hB : b === last ? hA : hs) >= 0 ? 1 : -1;
+          const push = side => { const out = [];
+            for (let i = a; i <= b; i++) { const L = local(pl, pts[i]); out.push(pts[i].clone().addScaledVector(pl.N, side * (zone + flank(pl, L.s, L.t, f.r, side) + 0.006) - L.h)); }
+            return { out, hit: othersHit(pl, out) }; };
+          const same = push(pref), other = push(-pref);
+          (other.hit < same.hit ? other : same).out.forEach((X, j) => pts[a + j].copy(X));
+        }
+      }
+    }
+    if (!moved && it === 0) return true;   // never touched a sheet: leave it exactly as it is
+    if (!moved) {
+      // round off the bends, keeping only smoothing passes that stay clear
+      const clear = Xs => !sheets.some(pl => Xs.some(X => nearSheet(pl, X, m)));
+      for (let pass = 0; pass < 30; pass++) {
+        const q = pts.map(p => p.clone());
+        for (let i = 1; i < last; i++) q[i].copy(pts[i - 1]).add(pts[i + 1]).multiplyScalar(0.25).addScaledVector(pts[i], 0.5);
+        if (!clear(q)) break;
+        pts = q;
+      }
+      f.pts = pts; return true;
+    }
+    for (let pass = 0; pass < 2; pass++) {   // keep the bend smooth
+      const q = pts.map(p => p.clone());
+      for (let i = 1; i < last; i++) pts[i].copy(q[i - 1]).add(q[i + 1]).multiplyScalar(0.25).addScaledVector(q[i], 0.5);
+    }
+    pts = new THREE.CatmullRomCurve3(pts, false, 'centripetal').getSpacedPoints(last);
+  }
+  f.pts = pts;
+  return !sheets.some(pl => pts.some(X => nearSheet(pl, X, m)));
+}
+
+function buildSheet(def, n, rng) {
+  const a = BOND, s3 = Math.sqrt(3), dens = P.density;
+  const { U, V: Vv, N, C } = def;   // def is a placement from placeSheets()
+  const w = P.wrinkle, { f1, f2, p1, p2, p3 } = def;   // same surface the fibers rest on
+  const surf = (s, t) => C.clone().addScaledVector(U, s).addScaledVector(Vv, t)
+    .addScaledVector(N, def.k1 * s * s + def.k2 * t * t + w * (def.A * Math.sin(s * 11 + f1) * Math.cos(t * 8 + f2) + 0.008 * Math.sin(s * 31 + t * 23 + f2)));
+  const normalAt = (s, t) => { const e = 0.002, p = surf(s, t);
+    return new V3().crossVectors(surf(s + e, t).sub(p), surf(s, t + e).sub(p)).normalize(); };
+  const inside = (x, y) => { const th = Math.atan2(y / def.rh, x / def.rw);
+    const rr = 1 + 0.07 * Math.sin(3 * th + p1) + 0.05 * Math.sin(5 * th + p2) + 0.035 * Math.sin(8 * th + p3);
+    return Math.pow(Math.pow(Math.abs(x / def.rw), 2.6) + Math.pow(Math.abs(y / def.rh), 2.6), 1 / 2.6) < rr; };
+
+  const xy = [], key = new Map();
+  const jm = Math.ceil(def.rh * 1.25 / (1.5 * a)) + 1;
+  for (let j = -jm; j <= jm; j++) {
+    const im = Math.ceil(def.rw * 1.25 / (s3 * a)) + Math.abs(j) + 1;
+    for (let i = -im; i <= im; i++) {
+      const x = i * s3 * a + j * s3 * a / 2, y = j * 1.5 * a;
+      if (inside(x, y)) { key.set(`${i},${j},A`, xy.length); xy.push([x, y]); }
+      if (inside(x, y + a)) { key.set(`${i},${j},B`, xy.length); xy.push([x, y + a]); }
+    }
+  }
+  const adj = xy.map(() => new Set());
+  for (const [kk, idx] of key) {
+    const [i, j, s] = kk.split(','); if (s !== 'A') continue;
+    for (const nk of [`${i},${j},B`, `${+i + 1},${j - 1},B`, `${i},${j - 1},B`]) {
+      const o = key.get(nk); if (o !== undefined) { adj[idx].add(o); adj[o].add(idx); }
+    }
+  }
+  const alive = xy.map(() => true);
+  for (let changed = true; changed;) { changed = false;
+    adj.forEach((s, i) => { if (alive[i] && s.size < 2) { alive[i] = false; changed = true; for (const o of s) adj[o].delete(i); s.clear(); } }); }
+
+  const P3 = xy.map(([x, y], i) => alive[i] ? surf(x, y) : null);
+  const balls = { C: [], O: [], H: [] }, sticks = { C: [], O: [], H: [] };
+  const bond = (p, q, ep, eq, r) => { if (ep === eq) { sticks[ep].push(stickM(p, q, r)); return; }
+    const m = p.clone().lerp(q, 0.5); sticks[ep].push(stickM(p, m, r)); sticks[eq].push(stickM(m, q, r)); };
+  const doubleBond = (p, q, side, ep, eq) => { for (const s of [-1, 1]) { const o = side.clone().multiplyScalar(s * 0.0034); bond(p.clone().add(o), q.clone().add(o), ep, eq, R.gStick * 0.75); } };
+
+  for (let i = 0; i < xy.length; i++) { if (!alive[i]) continue;
+    if (P.atoms) balls.C.push(ballM(P3[i], R.cAtom));
+    else if (adj[i].size === 3) balls.C.push(ballM(P3[i], R.cc * 1.02)); // tiny joint spheres keep the lattice seamless
+    for (const o of adj[i]) if (o > i) sticks.C.push(stickM(P3[i], P3[o], R.cc));
+  }
+
+  if (dens > 0) {
+    const used = new Set();
+    const claim = (i) => { if (used.has(i)) return false; used.add(i); adj[i].forEach(o => used.add(o)); return true; };
+    const order = shuffle(xy.map((_, i) => i).filter(i => alive[i]), rng);
+    for (const i of order) {
+      const [x, y] = xy[i], p = P3[i], nrm = normalAt(x, y), deg = adj[i].size;
+      if (deg === 2) {
+        const nb = [...adj[i]];
+        const dx = -(xy[nb[0]][0] + xy[nb[1]][0] - 2 * x), dy = -(xy[nb[0]][1] + xy[nb[1]][1] - 2 * y);
+        const dl = Math.hypot(dx, dy) || 1;
+        const out = surf(x + dx / dl * a, y + dy / dl * a).sub(p).normalize();
+        const roll = rng();
+        if (roll < 0.09 * dens && claim(i)) {          // edge –COOH
+          const cc = p.clone().addScaledVector(out, a * 1.07);
+          const o1 = cc.clone().addScaledVector(out, a * 0.43).addScaledVector(nrm, a * 0.74);
+          const o2 = cc.clone().addScaledVector(out, a * 0.47).addScaledVector(nrm, -a * 0.82);
+          const h = o2.clone().addScaledVector(new V3().copy(out).addScaledVector(nrm, -0.35).normalize(), a * 0.68);
+          balls.C.push(ballM(cc, P.atoms ? R.cAtom : R.gStick * 1.05));
+          balls.O.push(ballM(o1, R.O), ballM(o2, R.O)); balls.H.push(ballM(h, R.H));
+          bond(p, cc, 'C', 'C', R.gStick);
+          doubleBond(cc, o1, new V3().crossVectors(out, nrm).normalize(), 'C', 'O');
+          bond(cc, o2, 'C', 'O', R.gStick); bond(o2, h, 'O', 'H', R.gStick);
+        } else if (roll < 0.13 * dens && claim(i)) {   // edge –OH
+          const o = p.clone().addScaledVector(out, a * 1.0);
+          const h = o.clone().addScaledVector(new V3().copy(out).addScaledVector(nrm, 0.9).normalize(), a * 0.68);
+          balls.O.push(ballM(o, R.O)); balls.H.push(ballM(h, R.H));
+          bond(p, o, 'C', 'O', R.gStick); bond(o, h, 'O', 'H', R.gStick);
+        }
+      } else if (rng() < 0.035 * dens && claim(i)) {   // basal –OH
+        const side = rng() < 0.5 ? 1 : -1, n2 = nrm.clone().multiplyScalar(side);
+        const o = p.clone().addScaledVector(n2, a * 1.0);
+        const tdir = surf(x + a, y + a * 0.3).sub(p).normalize();
+        const h = o.clone().addScaledVector(n2.clone().multiplyScalar(0.35).addScaledVector(tdir, 0.94).normalize(), a * 0.68);
+        balls.O.push(ballM(o, R.O)); balls.H.push(ballM(h, R.H));
+        bond(p, o, 'C', 'O', R.gStick); bond(o, h, 'O', 'H', R.gStick);
+      } else if (rng() < 0.025 * dens) {               // basal epoxy C–O–C
+        const q = [...adj[i]].find(o => adj[o].size === 3 && !used.has(o));
+        if (q !== undefined && claim(i)) {
+          used.add(q); adj[q].forEach(o => used.add(o));
+          const side = rng() < 0.5 ? 1 : -1, n2 = nrm.clone().multiplyScalar(side);
+          const o = p.clone().lerp(P3[q], 0.5).addScaledVector(n2, a * 0.85);
+          balls.O.push(ballM(o, R.O));
+          bond(p, o, 'C', 'O', R.gStick); bond(P3[q], o, 'C', 'O', R.gStick);
+        }
+      }
+    }
+  }
+
+  const grp = new THREE.Group(); grp.name = `GO_sheet_${n}`;
+  { // faint basal-plane film gives each flake body without hiding the lattice
+    const st = a * 0.9, ex = def.rw * 1.15, ey = def.rh * 1.15, nx = Math.ceil(2 * ex / st), ny = Math.ceil(2 * ey / st);
+    const pos = [], ids = [], vi = new Map();
+    const vid = (i, j) => { const k = i * 10000 + j; if (vi.has(k)) return vi.get(k); const p = surf(-ex + i * st, -ey + j * st); vi.set(k, pos.length / 3); pos.push(p.x, p.y, p.z); return vi.get(k); };
+    for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) {
+      const x = -ex + (i + 0.5) * st, y = -ey + (j + 0.5) * st;
+      if (!inside(x * 1.03, y * 1.03)) continue;
+      const v00 = vid(i, j), v10 = vid(i + 1, j), v01 = vid(i, j + 1), v11 = vid(i + 1, j + 1);
+      ids.push(v00, v10, v11, v00, v11, v01);
+    }
+    const fg = new THREE.BufferGeometry(); fg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); fg.setIndex(ids); fg.computeVertexNormals();
+    const fm = new THREE.Mesh(fg, mats.film); fm.name = `GO${n}_film`; fm.renderOrder = -1; grp.add(fm);
+  }
+  const add = (list, base, mat, nm) => { if (!list.length) return; const m = new THREE.Mesh(bake(base, list), mat); m.name = `GO${n}_${nm}`; grp.add(m); };
+  add(sticks.C, UNIT_CYL, mats.Cb, 'C_bonds'); add(balls.C, UNIT_BALL, mats.C, 'C_atoms');
+  add(sticks.O, UNIT_CYL, mats.O, 'O_bonds'); add(balls.O, UNIT_BALL, mats.O, 'O_atoms');
+  add(sticks.H, UNIT_CYL, mats.H, 'H_bonds'); add(balls.H, UNIT_BALL, mats.H, 'H_atoms');
+  return grp;
+}
+
+let current = null, currentR = 1, first = true;
+function build() {
+  SKIN = (P.density > 0 ? 0.035 : 0.012) * K;   // with no groups, fibers rest on the bare lattice
+  const rng = mulberry32(P.seed);
+  const model = new THREE.Group(); model.name = 'Cellulose_GO_hydrogel';
+  let sheets = placeSheets(P.sheets);
+  const paths = buildFibers(rng, sheets);
+  separate(paths, sheets);
+  const straight = paths.map(f => f.pts);
+  let stuck = [];
+  for (let round = 0; round < 10; round++) {
+    paths.forEach((f, i) => { f.pts = straight[i]; });
+    stuck = paths.filter(f => !deflect(f, sheets));
+    if (!stuck.length) break;
+    // a fiber could not get round: shrink the sheets it still meets, then bend again
+    for (const pl of sheets) if (stuck.some(f => f.pts.some(X => nearSheet(pl, X, f.r + SKIN + GAP)))) {
+      pl.rw *= 0.8; pl.rh *= 0.8; pl.samples = sheetSamples(pl);
+    }
+  }
+  // bending may have pushed fibers into each other: separate again, then re-check the sheets;
+  // a fiber that cannot be cleared again keeps its earlier shape, which is clear of every sheet
+  if (!stuck.length) {
+    const cleared = paths.map(f => f.pts.map(v => v.clone()));   // separate() moves points in place
+    separate(paths, sheets);
+    paths.forEach((f, i) => { if (!deflect(f, sheets)) f.pts = cleared[i]; });
+  }
+  // last resort if shrinking was not enough: leave out a sheet a fiber still meets
+  if (stuck.length) sheets = sheets.filter(pl => !stuck.some(f => f.pts.some(X => nearSheet(pl, X, f.r + SKIN + GAP))));
+  model.add(fiberMeshes(paths));
+  const go = new THREE.Group(); go.name = 'graphene_oxide';
+  sheets.forEach((pl, i) => go.add(buildSheet(pl, i + 1, mulberry32(P.seed * 31 + i))));
+  model.add(go);
+  model.rotation.y = 0.32;
+  const cam = stage._camera, ctl = stage._controls;
+  // on a rebuild keep the viewing direction and relative zoom, re-centred on the new model
+  const keep = !first ? { dir: cam.position.clone().sub(ctl.target), r: currentR } : null;
+  if (current) current.traverse(o => o.isMesh && o.geometry.dispose());
+  stage.setObject(model); current = model; first = false;
+  const sph = new THREE.Box3().setFromObject(model).getBoundingSphere(new THREE.Sphere());
+  currentR = sph.radius;   // kept out of userData so it never ends up in the GLB
+  if (keep) { ctl.target.copy(sph.center); cam.position.copy(sph.center).addScaledVector(keep.dir, sph.radius / keep.r); }
+  else { ctl.target.copy(sph.center); cam.position.copy(sph.center).add(new V3(0.9, 0.45, 0.6).normalize().multiplyScalar(sph.radius * 1.8 * Math.max(1, 0.8 / cam.aspect))); }   // portrait screens: back off so the width fits
+  ctl.update();
+}
+
+// ---------- UI ----------
+const $ = id => document.getElementById(id);
+const busy = $('busy');
+let timer; const rebuild = () => { document.body.style.cursor = 'progress'; clearTimeout(timer); timer = setTimeout(() => { build(); document.body.style.cursor = ''; save(); }, 30); };
+const fmt = { perAxis: v => v, radius: v => (+v).toFixed(3), curve: v => (+v).toFixed(1), sheets: v => v, wrinkle: v => (+v).toFixed(1), density: v => (+v).toFixed(1) };
+for (const k of Object.keys(fmt)) {
+  const el = $(k); el.value = P[k]; $(k + 'V').textContent = fmt[k](P[k]);
+  el.addEventListener('input', () => { $(k + 'V').textContent = fmt[k](el.value); });
+  el.addEventListener('change', () => { P[k] = +el.value; rebuild(); });
+}
+$('atoms').checked = P.atoms; $('atoms').addEventListener('change', () => { P.atoms = $('atoms').checked; rebuild(); });
+$('spin').checked = P.spin; stage._controls.autoRotate = P.spin;
+$('spin').addEventListener('change', () => { P.spin = $('spin').checked; stage._controls.autoRotate = P.spin; save(); });
+const segBtns = [...$('dist').children];
+const syncSeg = () => segBtns.forEach(b => b.classList.toggle('on', b.dataset.v === P.dist));
+segBtns.forEach(b => b.addEventListener('click', () => { P.dist = b.dataset.v; syncSeg(); rebuild(); })); syncSeg();
+$('reseed').addEventListener('click', () => { P.seed = (Math.random() * 1e6) | 0; rebuild(); });
+$('phead').addEventListener('click', () => { const c = $('panel').classList.toggle('closed'); $('ptoggle').textContent = c ? '展开' : '收起'; });
+$('glb').addEventListener('click', () => stage._runExport('glb'));
+$('obj').addEventListener('click', () => stage._runExport('obj'));
+
+function applyColors() {
+  mats.A.color.set(P.colorA); mats.B.color.set(P.colorB); mats.C.color.set(P.colorC); mats.film.color.set(P.colorC); mats.Cb.color.set(P.colorC);   // dark ring outlines, as in the reference mats.film.color.set(P.colorC).lerp(new THREE.Color('#ffffff'), 0.5); mats.O.color.set(P.colorO);
+  for (const [id, k] of [['colorA', 'colorA'], ['colorB', 'colorB'], ['colorC', 'colorC'], ['colorO', 'colorO']]) $(id).value = P[k];
+  $('kA').style.background = P.colorA; $('kB').style.background = P.colorB; $('kC').style.background = P.colorC; $('kO').style.background = P.colorO;
+  [...$('presets').children].forEach((b, i) => b.classList.toggle('on', PRESETS[i].a === P.colorA && PRESETS[i].b === P.colorB));
+  save();
+}
+PRESETS.forEach(p => { const b = document.createElement('button');
+  b.innerHTML = `<i><b style="background:${p.a}"></b><b style="background:${p.b}"></b></i>`;
+  b.addEventListener('click', () => { P.colorA = p.a; P.colorB = p.b; applyColors(); }); $('presets').appendChild(b); });
+for (const k of ['colorA', 'colorB', 'colorC', 'colorO']) $(k).addEventListener('input', e => { P[k] = e.target.value; applyColors(); });
+
+$('png').addEventListener('click', () => {
+  const r = renderer, pr = r.getPixelRatio(), w = stage.clientWidth, h = stage.clientHeight;
+  stage._ground.visible = false; r.setPixelRatio(3); r.setSize(w, h); r.render(scene, stage._camera);
+  const url = r.domElement.toDataURL('image/png');
+  stage._ground.visible = true; r.setPixelRatio(pr); r.setSize(w, h);
+  const a = document.createElement('a'); a.href = url; a.download = 'cellulose_GO_hydrogel_large_rings.png'; document.body.appendChild(a); a.click(); a.remove();
+});
+
+applyColors();
+build();
+</script>
+</body>
+</html>
