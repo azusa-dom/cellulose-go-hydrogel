@@ -133,6 +133,7 @@
     <div class="sec">
       <h2>氧化石墨烯</h2>
       <div class="row"><label><span>片层数</span><span id="sheetsV"></span></label><input type="range" id="sheets" min="0" max="6" step="1"></div>
+      <div class="row"><label><span>片层大小</span><span id="sheetSizeV"></span></label><input type="range" id="sheetSize" min="0.5" max="1.6" step="0.05"></div>
       <div class="row"><label><span>褶皱程度</span><span id="wrinkleV"></span></label><input type="range" id="wrinkle" min="0" max="1.5" step="0.1"></div>
       <div class="row"><label><span>官能团密度</span><span id="densityV"></span></label><input type="range" id="density" min="0" max="2" step="0.1"></div>
       <label class="sw-row">显示碳原子球（球棍模型）<input type="checkbox" id="atoms"></label>
@@ -198,9 +199,9 @@ const PRESETS = [
   { a: '#c4e3a8', b: '#9fd3e6' },
 ];
 const SAVE_KEY = 'cellGO3d.largeRings.clump2';
-const DEF = { seed: 11, colorA: PRESETS[0].a, colorB: PRESETS[0].b, colorC: '#3b4654', colorO: '#e2725f', finish: 'frost', dist: 'alternate', perAxis: 4, radius: 0.034, curve: 1, sheets: 3, wrinkle: 0.6, density: 0, atoms: false, spin: false, bg: 'gradient' };
+const DEF = { seed: 11, colorA: PRESETS[0].a, colorB: PRESETS[0].b, colorC: '#3b4654', colorO: '#e2725f', finish: 'frost', dist: 'alternate', perAxis: 4, radius: 0.034, curve: 1, sheets: 3, sheetSize: 1, wrinkle: 0.6, density: 0, atoms: false, spin: false, bg: 'gradient' };
 const P = Object.assign({}, DEF, JSON.parse(localStorage.getItem(SAVE_KEY) || '{}'));
-for (const [k, lo, hi] of [['perAxis', 3, 6], ['radius', 0.028, 0.055], ['curve', 0, 1.6], ['wrinkle', 0, 1.5]]) P[k] = Math.min(hi, Math.max(lo, P[k]));
+for (const [k, lo, hi] of [['sheetSize', 0.5, 1.6], ['perAxis', 3, 6], ['radius', 0.028, 0.055], ['curve', 0, 1.6], ['wrinkle', 0, 1.5]]) P[k] = Math.min(hi, Math.max(lo, P[k]));
 const save = () => localStorage.setItem(SAVE_KEY, JSON.stringify(P));
 
 // frosted hydrogel: translucent, light scattered through the body; matte: the earlier solid look
@@ -297,7 +298,7 @@ function clumpSheets() {
       // wrap the clump and stay in view
       const dir = randomUnit(rng), C = dir.clone().multiplyScalar(CLUMP * (0.45 + 0.4 * rng()));
       const N = dir.clone().addScaledVector(randomUnit(rng), 0.9).normalize(), U = new V3().crossVectors(N, randomUnit(rng)).normalize(), Vv = new V3().crossVectors(N, U);
-      const s0 = 0.42 * g;
+      const s0 = 0.26 * P.sheetSize * g;   // flake half-width; the size slider scales it
       const folds = [...Array(4)].map(() => { const th = r2() * 6.28, kk = 7 + r2() * 6;
         return [kk * Math.cos(th), kk * Math.sin(th), 0.03 + r2() * 0.03, r2() * 6.28]; });
       const pl = { U, V: Vv, N, C, rw: s0 * (0.8 + 0.4 * r2()), rh: s0 * (0.8 + 0.4 * r2()), pe: 2.6,
@@ -842,7 +843,7 @@ function build() {
 const $ = id => document.getElementById(id);
 const busy = $('busy');
 let timer; const rebuild = () => { document.body.style.cursor = 'progress'; clearTimeout(timer); timer = setTimeout(() => { build(); document.body.style.cursor = ''; save(); }, 30); };
-const fmt = { perAxis: v => v, radius: v => (+v).toFixed(3), curve: v => (+v).toFixed(1), sheets: v => v, wrinkle: v => (+v).toFixed(1), density: v => (+v).toFixed(1) };
+const fmt = { perAxis: v => v, radius: v => (+v).toFixed(3), curve: v => (+v).toFixed(1), sheets: v => v, sheetSize: v => (+v).toFixed(2), wrinkle: v => (+v).toFixed(1), density: v => (+v).toFixed(1) };
 for (const k of Object.keys(fmt)) {
   const el = $(k); el.value = P[k]; $(k + 'V').textContent = fmt[k](P[k]);
   el.addEventListener('input', () => { $(k + 'V').textContent = fmt[k](el.value); });
