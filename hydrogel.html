@@ -102,6 +102,7 @@
     <span class="sw rod" id="kB"></span><span contenteditable="true">水凝胶纤维 B</span>
     <span class="sw" id="kC"></span><span contenteditable="true">氧化石墨烯 (GO) 碳骨架</span>
     <span class="sw" id="kO"></span><span contenteditable="true">含氧官能团 –OH / C–O–C / –COOH</span>
+    <span class="sw" id="kP"></span><span contenteditable="true">附着小球（示意）</span>
   </div>
 </div>
 
@@ -116,6 +117,7 @@
         <label><input type="color" id="colorB"> 纤维 B</label>
         <label><input type="color" id="colorC"> GO 片层</label>
         <label><input type="color" id="colorO"> 官能团 O</label>
+        <label><input type="color" id="colorP"> 小球</label>
       </div>
       <div class="row"><label>纤维材质</label>
         <div class="seg" id="finish" style="grid-template-columns:1fr 1fr"><button data-v="frost">磨砂半透明</button><button data-v="matte">哑光实心</button></div>
@@ -137,6 +139,11 @@
       <div class="row"><label><span>褶皱程度</span><span id="wrinkleV"></span></label><input type="range" id="wrinkle" min="0" max="1.5" step="0.1"></div>
       <div class="row"><label><span>官能团密度</span><span id="densityV"></span></label><input type="range" id="density" min="0" max="2" step="0.1"></div>
       <label class="sw-row">显示碳原子球（球棍模型）<input type="checkbox" id="atoms"></label>
+    </div>
+    <div class="sec">
+      <h2>附着小球（示意）</h2>
+      <div class="row"><label><span>小球数量</span><span id="ballsV"></span></label><input type="range" id="balls" min="0" max="10" step="1"></div>
+      <div class="row"><label><span>小球大小</span><span id="ballRV"></span></label><input type="range" id="ballR" min="0.03" max="0.08" step="0.002"></div>
     </div>
     <div class="sec">
       <h2>视图与导出</h2>
@@ -198,10 +205,10 @@ const PRESETS = [
   { a: '#a8e0d6', b: '#b1c3f0' },
   { a: '#c4e3a8', b: '#9fd3e6' },
 ];
-const SAVE_KEY = 'cellGO3d.clump2';
-const DEF = { seed: 11, colorA: PRESETS[0].a, colorB: PRESETS[0].b, colorC: '#3b4654', colorO: '#e2725f', finish: 'frost', dist: 'alternate', perAxis: 4, radius: 0.034, curve: 1, sheets: 3, sheetSize: 1, wrinkle: 1, density: 0.35, atoms: false, spin: false, bg: 'gradient' };
+const SAVE_KEY = 'cellGO3d.clump3';
+const DEF = { seed: 11, colorA: PRESETS[0].a, colorB: PRESETS[0].b, colorC: '#3b4654', colorO: '#e2725f', colorP: '#E1A487', balls: 6, ballR: 0.05, finish: 'frost', dist: 'alternate', perAxis: 4, radius: 0.034, curve: 1, sheets: 3, sheetSize: 1, wrinkle: 1, density: 0.35, atoms: false, spin: false, bg: 'gradient' };
 const P = Object.assign({}, DEF, JSON.parse(localStorage.getItem(SAVE_KEY) || '{}'));
-for (const [k, lo, hi] of [['sheetSize', 0.5, 1.6], ['perAxis', 3, 6], ['radius', 0.028, 0.055], ['curve', 0, 1.6], ['wrinkle', 0, 1.5]]) P[k] = Math.min(hi, Math.max(lo, P[k]));
+for (const [k, lo, hi] of [['balls', 0, 10], ['ballR', 0.03, 0.08], ['sheetSize', 0.5, 1.6], ['perAxis', 3, 6], ['radius', 0.028, 0.055], ['curve', 0, 1.6], ['wrinkle', 0, 1.5]]) P[k] = Math.min(hi, Math.max(lo, P[k]));
 const save = () => localStorage.setItem(SAVE_KEY, JSON.stringify(P));
 
 // frosted hydrogel: translucent, light scattered through the body; matte: the earlier solid look
@@ -228,6 +235,7 @@ const mats = {
   Cb: new THREE.MeshStandardMaterial({ name: 'GO_bond', color: P.colorC, roughness: 0.55, metalness: 0, envMapIntensity: 0.6 }),
   O: new THREE.MeshStandardMaterial({ name: 'oxygen', color: P.colorO, roughness: 0.16, metalness: 0.08, envMapIntensity: 1.0 }),
   H: new THREE.MeshStandardMaterial({ name: 'hydrogen', color: '#f3f5f7', roughness: 0.16, metalness: 0.05, envMapIntensity: 1.0 }),
+  P: new THREE.MeshPhysicalMaterial({ name: 'particle', color: P.colorP, roughness: 0.35, metalness: 0, clearcoat: 0.6, clearcoatRoughness: 0.3, envMapIntensity: 0.9 }),
 };
 
 function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
@@ -408,6 +416,67 @@ function finalCut(paths, live) {
     if (best[1] - best[0] < Math.max(12, n * 0.35)) paths.splice(fi, 1); else f.pts = f.pts.slice(best[0], best[1] + 1);
   }
 }
+// fiber surface meets a flake's final (draped) surface?
+function onFlake(pl, X, m) {
+  _dl.subVectors(X, pl.C);
+  const s = _dl.dot(pl.U), t = _dl.dot(pl.V), h = _dl.dot(pl.N) - sheetH(pl, s, t);
+  return Math.abs(h) < m && inFoot(pl, s, t, m);
+}
+// rounder fibers for the figure: smooth out the kinks left by steering, keeping only
+// passes that stay clear of every flake
+function polishFibers(paths, live) {
+  for (const f of paths) {
+    const m = f.r + 0.016 * LS, last = f.pts.length - 1;
+    for (let pass = 0; pass < 12; pass++) {
+      const q = f.pts.map(v => v.clone());
+      for (let i = 1; i < last; i++) q[i].copy(f.pts[i - 1]).add(f.pts[i + 1]).multiplyScalar(0.25).addScaledVector(f.pts[i], 0.5);
+      if (live.some(pl => q.some(X => onFlake(pl, X, m)))) break;
+      f.pts = q;
+    }
+  }
+}
+// a few symbolic particles, stuck on a flake face or on a fiber B (never on fiber A), each
+// just touching its host and clear of every other flake, fiber and particle
+function placeParticles(paths, live) {
+  const rng = mulberry32(P.seed * 13 + 7), Rb = P.ballR, out = [];
+  const blue = paths.filter(f => !f.useA && f.pts.length > 10);
+  const lattice = (P.atoms ? R.cAtom : R.cc * 1.3);
+  const clear = (X, host) => {
+    for (const f of paths) { const lim = f.r + Rb + (f === host ? -0.002 : f.useA ? 0.015 : 0.004);   // clearly off fiber A
+      for (const Y of f.pts) if (X.distanceTo(Y) < lim) return false; }
+    for (const pl of live) if (pl !== host && onFlake(pl, X, Rb + lattice + 0.004)) return false;
+    return out.every(B => B.distanceTo(X) > 2 * Rb + 0.01);
+  };
+  for (let n = 0; n < P.balls; n++) {
+    for (let tr = 0; tr < 80; tr++) {
+      let X = null, host = null;
+      if (live.length && (!blue.length || rng() < 0.5)) {        // on a flake face
+        host = live[(rng() * live.length) | 0];
+        const s = (rng() - 0.5) * 1.3 * host.rw, t = (rng() - 0.5) * 1.3 * host.rh;
+        if (!inFoot(host, s, t)) continue;
+        const e = 0.004, at = (a, b) => host.C.clone().addScaledVector(host.U, a).addScaledVector(host.V, b).addScaledVector(host.N, sheetH(host, a, b));
+        const p0 = at(s, t), nrm = new V3().crossVectors(at(s + e, t).sub(p0), at(s, t + e).sub(p0)).normalize();
+        X = p0.addScaledVector(nrm, (rng() < 0.5 ? 1 : -1) * (Rb + lattice));
+        if (onFlake(host, X, Rb + lattice - 0.003)) continue;      // the face curls back over it
+      } else if (blue.length) {                                    // on a fiber B
+        host = blue[(rng() * blue.length) | 0];
+        const i = Math.floor(host.pts.length * (0.2 + 0.6 * rng())), P0 = host.pts[i];
+        const T = host.pts[i + 1].clone().sub(host.pts[i - 1]).normalize();
+        const d = randomUnit(rng); d.addScaledVector(T, -d.dot(T)).normalize();
+        X = P0.clone().addScaledVector(d, host.r + Rb);
+      }
+      if (X && clear(X, host)) { out.push(X); break; }
+    }
+  }
+  return out;
+}
+function particleMesh(centres) {
+  const grp = new THREE.Group(); grp.name = 'particles';
+  if (!centres.length) return grp;
+  const m = new THREE.Mesh(merge(centres.map(c => { const g = new THREE.SphereGeometry(P.ballR, 40, 28); g.deleteAttribute('uv'); g.translate(c.x, c.y, c.z); return g; })), mats.P);
+  m.name = 'particles'; grp.add(m);
+  return grp;
+}
 function clampLane(f) {
   const L = f.lane;
   if (L.type === 'free') return;   // clump fibers have no lane to keep to
@@ -484,7 +553,7 @@ function fiberMeshes(paths) {
     const caps = [[0, -1], [1, 1]].map(([t, sgn]) => {
       const out = curve.getTangent(t).multiplyScalar(sgn);
       const g = new THREE.SphereGeometry(r, 40, 10, 0, Math.PI * 2, 0, Math.PI / 2); g.deleteAttribute('uv');
-      g.applyMatrix4(new THREE.Matrix4().compose(curve.getPoint(t), new THREE.Quaternion().setFromUnitVectors(Y, out), new V3(1, 0.05, 1)));   // flat cut ends
+      g.applyMatrix4(new THREE.Matrix4().compose(curve.getPoint(t), new THREE.Quaternion().setFromUnitVectors(Y, out), new V3(1, 1, 1)));   // rounded ends
       return g;
     });
     const mesh = new THREE.Mesh(merge([tube, ...caps]), useA ? mats.A : mats.B);
@@ -811,11 +880,13 @@ function build() {
   paths.forEach(f => steer(f, sheets0));
   const live = resolve(paths, sheets0);
   finalCut(paths, live);
+  polishFibers(paths, live);
   model.add(fiberMeshes(paths));
   const FH = fiberHash(paths);
   const go = new THREE.Group(); go.name = 'graphene_oxide';
   live.forEach((pl, i) => go.add(buildSheet(pl, i + 1, FH)));
   model.add(go);
+  model.add(particleMesh(placeParticles(paths, live)));
   model.rotation.y = 0.32;
   const cam = stage._camera, ctl = stage._controls;
   const keep = !first ? { p: cam.position.clone(), t: ctl.target.clone() } : null;
@@ -830,7 +901,7 @@ function build() {
 const $ = id => document.getElementById(id);
 const busy = $('busy');
 let timer; const rebuild = () => { document.body.style.cursor = 'progress'; clearTimeout(timer); timer = setTimeout(() => { build(); document.body.style.cursor = ''; save(); }, 30); };
-const fmt = { perAxis: v => v, radius: v => (+v).toFixed(3), curve: v => (+v).toFixed(1), sheets: v => v, sheetSize: v => (+v).toFixed(2), wrinkle: v => (+v).toFixed(1), density: v => (+v).toFixed(1) };
+const fmt = { perAxis: v => v, radius: v => (+v).toFixed(3), curve: v => (+v).toFixed(1), balls: v => v, ballR: v => (+v).toFixed(3), sheets: v => v, sheetSize: v => (+v).toFixed(2), wrinkle: v => (+v).toFixed(1), density: v => (+v).toFixed(1) };
 for (const k of Object.keys(fmt)) {
   const el = $(k); el.value = P[k]; $(k + 'V').textContent = fmt[k](P[k]);
   el.addEventListener('input', () => { $(k + 'V').textContent = fmt[k](el.value); });
@@ -864,16 +935,16 @@ $('glb').addEventListener('click', () => stage._runExport('glb'));
 $('obj').addEventListener('click', () => stage._runExport('obj'));
 
 function applyColors() {
-  mats.A.color.set(P.colorA); mats.B.color.set(P.colorB); applyFinish(); mats.C.color.set(P.colorC); mats.film.color.set(P.colorC); mats.Cb.color.set(P.colorC); mats.O.color.set(P.colorO);
-  for (const [id, k] of [['colorA', 'colorA'], ['colorB', 'colorB'], ['colorC', 'colorC'], ['colorO', 'colorO']]) $(id).value = P[k];
-  $('kA').style.background = P.colorA; $('kB').style.background = P.colorB; $('kC').style.background = P.colorC; $('kO').style.background = P.colorO;
+  mats.A.color.set(P.colorA); mats.B.color.set(P.colorB); applyFinish(); mats.C.color.set(P.colorC); mats.film.color.set(P.colorC); mats.Cb.color.set(P.colorC); mats.O.color.set(P.colorO); mats.P.color.set(P.colorP);
+  for (const [id, k] of [['colorA', 'colorA'], ['colorB', 'colorB'], ['colorC', 'colorC'], ['colorO', 'colorO'], ['colorP', 'colorP']]) $(id).value = P[k];
+  $('kA').style.background = P.colorA; $('kB').style.background = P.colorB; $('kC').style.background = P.colorC; $('kO').style.background = P.colorO; $('kP').style.background = P.colorP;
   [...$('presets').children].forEach((b, i) => b.classList.toggle('on', PRESETS[i].a === P.colorA && PRESETS[i].b === P.colorB));
   save();
 }
 PRESETS.forEach(p => { const b = document.createElement('button');
   b.innerHTML = `<i><b style="background:${p.a}"></b><b style="background:${p.b}"></b></i>`;
   b.addEventListener('click', () => { P.colorA = p.a; P.colorB = p.b; applyColors(); }); $('presets').appendChild(b); });
-for (const k of ['colorA', 'colorB', 'colorC', 'colorO']) $(k).addEventListener('input', e => { P[k] = e.target.value; applyColors(); });
+for (const k of ['colorA', 'colorB', 'colorC', 'colorO', 'colorP']) $(k).addEventListener('input', e => { P[k] = e.target.value; applyColors(); });
 
 $('png').addEventListener('click', () => {
   const r = renderer, pr = r.getPixelRatio(), w = stage.clientWidth, h = stage.clientHeight;
