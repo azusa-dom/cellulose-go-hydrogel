@@ -128,7 +128,7 @@
     </div>
     <div class="sec">
       <h2>水凝胶纤维</h2>
-      <div class="row"><label><span>每方向数量</span><span id="perAxisV"></span></label><input type="range" id="perAxis" min="3" max="6" step="1"></div>
+      <div class="row"><label><span>纤维条数</span><span id="strandsV"></span></label><input type="range" id="strands" min="4" max="16" step="1"></div>
       <div class="row"><label><span>粗细</span><span id="radiusV"></span></label><input type="range" id="radius" min="0.028" max="0.055" step="0.001"></div>
       <div class="row"><label><span>弯曲程度</span><span id="curveV"></span></label><input type="range" id="curve" min="0" max="1.6" step="0.1"></div>
     </div>
@@ -205,10 +205,10 @@ const PRESETS = [
   { a: '#a8e0d6', b: '#b1c3f0' },
   { a: '#c4e3a8', b: '#9fd3e6' },
 ];
-const SAVE_KEY = 'cellGO3d.clump4';
-const DEF = { seed: 11, colorA: PRESETS[0].a, colorB: PRESETS[0].b, colorC: '#3b4654', colorO: '#e2725f', colorP: '#E1A487', balls: 6, ballR: 0.05, finish: 'matte', dist: 'alternate', perAxis: 3, radius: 0.034, curve: 0.6, sheets: 3, sheetSize: 1.5, wrinkle: 1, density: 0.6, atoms: true, spin: false, bg: 'transparent'};
+const SAVE_KEY = 'cellGO3d.strands1';
+const DEF = { seed: 11, colorA: PRESETS[0].a, colorB: PRESETS[0].b, colorC: '#3b4654', colorO: '#e2725f', colorP: '#E1A487', balls: 6, ballR: 0.05, finish: 'matte', dist: 'alternate', strands: 10, radius: 0.034, curve: 0.6, sheets: 3, sheetSize: 1.5, wrinkle: 1, density: 0.6, atoms: true, spin: false, bg: 'transparent'};
 const P = Object.assign({}, DEF, JSON.parse(localStorage.getItem(SAVE_KEY) || '{}'));
-for (const [k, lo, hi] of [['balls', 0, 10], ['ballR', 0.03, 0.08], ['sheetSize', 0.5, 1.6], ['perAxis', 3, 6], ['radius', 0.028, 0.055], ['curve', 0, 1.6], ['wrinkle', 0, 1.5]]) P[k] = Math.min(hi, Math.max(lo, P[k]));
+for (const [k, lo, hi] of [['balls', 0, 10], ['ballR', 0.03, 0.08], ['sheetSize', 0.5, 1.6], ['strands', 4, 16], ['radius', 0.028, 0.055], ['curve', 0, 1.6], ['wrinkle', 0, 1.5]]) P[k] = Math.min(hi, Math.max(lo, P[k]));
 const save = () => localStorage.setItem(SAVE_KEY, JSON.stringify(P));
 
 // frosted hydrogel: translucent, light scattered through the body; matte: the earlier solid look
@@ -286,8 +286,8 @@ const ballM = (p, r) => new THREE.Matrix4().compose(p, new THREE.Quaternion(), n
 // Nothing is laid out on a grid. Flakes are dropped round a ball at random positions and
 // angles, each crumpled (bent as a whole and creased by random folds), and kept apart so
 // no two flakes touch; if the ball is crowded a flake is made smaller, never moved out.
-// Fibers are short, nearly straight rods at random positions and angles inside the ball,
-// placed in the gaps between flakes and between each other. GO is impermeable: where a fiber cannot avoid a
+// Fibers are a few long continuous strands wandering through the ball, swinging round
+// flakes and round each other. GO is impermeable: where a fiber cannot avoid a
 // flake, the flake is trimmed back or the fiber ends before it (resolve(), finalCut()). The
 // "random layout" button draws a new clump; every slider still applies.
 const CLUMP = 0.42;   // radius of the ball the clump fills
@@ -319,36 +319,60 @@ function clumpSheets() {
   return out;
 }
 function clumpFibers(rng, sheets) {
-  // short, nearly straight rods with a gentle bow (curve slider), as in the usual schematic.
-  // Each rod tries many random positions and directions and keeps the one that crosses no
-  // flake and keeps its distance from the rods already placed, so rods spread evenly
-  // through the clump instead of knotting in the middle and need no bending afterwards.
-  const paths = [], total = 6 * P.perAxis;
-  // a rod meeting a flake at any angle (or running closer than its radius to the face)
-  // would have the flake trimmed, so count every such point
-  const meets = f => { let n = 0;
-    for (const pl of sheets) { let prev = null;
-      for (const X of f.pts) { const l = local(pl, X);
-        if (inFoot(pl, l.s, l.t, f.r + 0.02) && (Math.abs(l.h) < f.r + 0.03 || (prev !== null && (l.h < 0) !== (prev < 0)))) n++;
-        prev = l.h; } }
-    return n; };
-  const crowd = f => { let n = 0;
-    for (const g of paths) { const lim = f.r + g.r + 0.03;
-      for (let i = 0; i < f.pts.length; i += 4) for (let j = 0; j < g.pts.length; j += 4) if (f.pts[i].distanceTo(g.pts[j]) < lim) n++; }
-    return n; };
-  for (let k = 0; k < total; k++) {
+  // a few long strands, each one continuous chain wandering through the clump: it runs
+  // fairly straight for a while, then bends round in a smooth turn (curve slider sets how
+  // much it wanders), turns back in at the edge of the clump, and looks a few steps ahead
+  // so it swings round flakes and round the strands already laid instead of meeting them
+  const paths = [], STEP = 0.025, cell = 0.1, grid = new Map();
+  const key = (x, y, z) => Math.floor(x / cell) + ',' + Math.floor(y / cell) + ',' + Math.floor(z / cell);
+  const crowded = (X, r) => {
+    const cx = Math.floor(X.x / cell), cy = Math.floor(X.y / cell), cz = Math.floor(X.z / cell);
+    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) {
+      const L = grid.get((cx + a) + ',' + (cy + b) + ',' + (cz + c)); if (!L) continue;
+      for (let i = 0; i < L.length; i += 2) if (L[i].distanceTo(X) < r + L[i + 1] + 0.025) return true;
+    }
+    return false;
+  };
+  const onSheet = (X, r) => sheets.some(pl => { const l = local(pl, X); return Math.abs(l.h) < r + 0.04 && inFoot(pl, l.s, l.t, r + 0.04); });
+  const EDGE = CLUMP * 1.2;   // strands may bow a little past the flakes before turning back in
+  const cost = (X, r) => (X.length() > EDGE ? 10 + 200 * (X.length() - EDGE) : 0) + (onSheet(X, r) ? 100 : 0) + (crowded(X, r) ? 30 : 0);
+  for (let k = 0; k < P.strands; k++) {
     const r = P.radius * (0.92 + rng() * 0.16);
     const useA = P.dist === 'alternate' ? k % 2 === 0 : P.dist === 'axis' ? k % 3 !== 1 : rng() < 0.5;
-    let best = null;
-    for (let tr = 0; tr < 70 && !(best && best.score === 0); tr++) {
-      const M = randomUnit(rng).multiplyScalar(CLUMP * 0.9 * Math.cbrt(rng())), d = randomUnit(rng), L = 0.2 + rng() * 0.12;
-      const bow = randomUnit(rng); bow.addScaledVector(d, -bow.dot(d)).normalize().multiplyScalar(0.05 * P.curve * (0.4 + rng()));
-      const pts = new THREE.CatmullRomCurve3([M.clone().addScaledVector(d, -L), M.clone().add(bow), M.clone().addScaledVector(d, L)], false, 'centripetal').getSpacedPoints(70);
-      const f = { pts, r, useA, k, lane: { type: 'free' } };
-      const score = 100 * meets(f) + crowd(f);
-      if (!best || score < best.score) best = { f, score };
+    let pts = null;
+    for (let att = 0; att < 8 && !pts; att++) {   // a strand boxed in too early starts again elsewhere
+      let p = null;
+      for (let tr = 0; tr < 80 && !p; tr++) { const q = randomUnit(rng).multiplyScalar(CLUMP * 0.85 * Math.cbrt(rng())); if (!cost(q, r)) p = q; }
+      if (!p) continue;
+      let d = randomUnit(rng), run = 0, runLen = 0.3 + rng() * 0.3;
+      const walk = [p.clone()], total = (1.2 + rng() * 0.7) / STEP;
+      for (let s = 0; s < total; s++) {
+        run += STEP;
+        let turn = 0.02 + 0.03 * P.curve;
+        if (run > runLen) { run = 0; runLen = 0.3 + rng() * 0.3; turn = 0.15 + 0.25 * P.curve; }
+        let best = null;
+        for (let c = 0; c < 14; c++) {
+          const nd = d.clone().addScaledVector(randomUnit(rng), turn + c * 0.08).normalize();
+          const q = p.clone().addScaledVector(nd, STEP), ahead = p.clone().addScaledVector(nd, STEP * 6);
+          const sc = cost(q, r) + 0.3 * cost(ahead, r) + c * 0.01;
+          if (!best || sc < best.sc) best = { nd, q, sc };
+          if (sc < 1) break;
+        }
+        if (best.sc >= 100) break;   // boxed in: the strand ends here
+        d = best.nd; p = best.q; walk.push(p.clone());
+      }
+      if (walk.length >= total * 0.6) pts = walk;
     }
-    paths.push(best.f);
+    if (!pts) continue;
+    for (let pass = 0; pass < 10; pass++) {   // round the bends, keeping only passes that stay off the flakes
+      const q = pts.map(v => v.clone()); smoothPts(q, 1);
+      if (q.some(X => onSheet(X, r))) break;
+      pts = q;
+    }
+    const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
+    const f = { pts: curve.getSpacedPoints(Math.max(40, Math.round(curve.getLength() / 0.02))), r, useA, k, lane: { type: 'free' } };
+    for (const X of f.pts) { const kk = key(X.x, X.y, X.z); (grid.get(kk) || grid.set(kk, []).get(kk)).push(X, r); }
+    paths.push(f);
   }
   return paths;
 }
@@ -861,7 +885,7 @@ function build() {
 const $ = id => document.getElementById(id);
 const busy = $('busy');
 let timer; const rebuild = () => { document.body.style.cursor = 'progress'; clearTimeout(timer); timer = setTimeout(() => { build(); document.body.style.cursor = ''; save(); }, 30); };
-const fmt = { perAxis: v => v, radius: v => (+v).toFixed(3), curve: v => (+v).toFixed(1), balls: v => v, ballR: v => (+v).toFixed(3), sheets: v => v, sheetSize: v => (+v).toFixed(2), wrinkle: v => (+v).toFixed(1), density: v => (+v).toFixed(1) };
+const fmt = { strands: v => v, radius: v => (+v).toFixed(3), curve: v => (+v).toFixed(1), balls: v => v, ballR: v => (+v).toFixed(3), sheets: v => v, sheetSize: v => (+v).toFixed(2), wrinkle: v => (+v).toFixed(1), density: v => (+v).toFixed(1) };
 for (const k of Object.keys(fmt)) {
   const el = $(k); el.value = P[k]; $(k + 'V').textContent = fmt[k](P[k]);
   el.addEventListener('input', () => { $(k + 'V').textContent = fmt[k](el.value); });
